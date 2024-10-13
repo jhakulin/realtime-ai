@@ -169,6 +169,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
             #await self.client.clear_input_audio_buffer()
             # Update audio playback status
             self._is_audio_playing = False
+        self.audio_player.drain_and_restart()
 
     async def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone) -> None:
         logger.info(f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}")
@@ -256,6 +257,7 @@ async def main():
         options = RealtimeAIOptions(
             api_key=api_key,
             model="gpt-4o-realtime-preview-2024-10-01",
+            modalities=["audio", "text"],
             instructions="You are a helpful assistant. Respond concisely. If user asks to tell story, tell story very shortly.",
             turn_detection=None,
             tools=[
