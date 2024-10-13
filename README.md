@@ -2,7 +2,7 @@
 
 ## Overview
 
-This Python project exemplifies a modular approach to interacting with OpenAI's Realtime REST APIs. It enables the capture and processing of real-time audio by streaming it efficiently to the API for analysis or transcription.
+This Python project exemplifies a modular approach to interacting with OpenAI's Realtime WebSocket APIs. It enables the capture and processing of real-time audio by streaming it efficiently to the API for analysis or transcription.
 
 ---
 
