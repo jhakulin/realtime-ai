@@ -2,7 +2,7 @@
 
 ## Overview
 
-This Python project exemplifies a modular approach to interacting with OpenAI's Realtime REST APIs. It enables the capture and processing of real-time audio through the microphone, streaming it efficiently to the API for analysis or transcription.
+This Python project exemplifies a modular approach to interacting with OpenAI's Realtime REST APIs. It enables the capture and processing of real-time audio by streaming it efficiently to the API for analysis or transcription.
 
 ---
 
@@ -12,16 +12,11 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
    - **Purpose**: Acts as the high-level orchestrator, integrating with service and audio managers for comprehensive functionality.
    - **Main Features**:
      - Coordinates the lifecycle and interactions among different managers.
-     - Provides synchronous methods to start and stop the client.
-     - Handles audio input and output, triggering the appropriate streaming commands.
+     - Provides asynchronous and synchronous methods to start and stop the client.
+     - Handles audio input and process appropriate events back to the application.
 
 2. **RealtimeAIOptions**
-   - **Purpose**: Encapsulates configuration parameters for the OpenAI API, such as API keys, model choices, and reconnect settings.
-   - **Attributes**:
-     - `api_key`: The OpenAI API key for authentication.
-     - `model`: Specifies the model to be used.
-     - `instructions`: Initial instructions or prompts to the AI model.
-     - Contains retry settings for controlling connection attempts.
+   - **Purpose**: Encapsulates configuration parameters for the OpenAI API, such as API keys, model choices etc.
 
 3. **RealtimeAIServiceManager**
    - **Purpose**: Interfaces with the WebSocketManager to handle event processing and communication logic.
@@ -33,23 +28,22 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 4. **AudioStreamManager**
    - **Purpose**: Streams real-time audio data to the OpenAI Realtime service via RealtimeServiceManager (which sends the data to websocket)
    - **Main Features**:
-     - Uses asynchronous queues to manage audio data buffering.
+     - Uses queues to manage audio data buffering.
      - Encodes audio into an acceptable format and sends it to the API.
      - Offers controls to start and stop audio streaming.
 
 5. **WebSocketManager**
    - **Purpose**: Manages WebSocket connections, providing stability through reconnection strategies.
    - **Main Features**:
-     - Establishes and maintains WebSocket connections using `asyncio`.
-     - Implements exponential backoff for reconnection attempts.
-     - Both sends and receives data asynchronously from the OpenAI API.
+     - Establishes and maintains WebSocket connections.
+     - Both sends and receives data from the OpenAI API.
 
 6. **Sample Script (`main.py`)**
-   - **Purpose**: Demonstrates capturing live audio from a microphone, sending it to the OpenAI API using the selected model.
+   - **Purpose**: Demonstrates capturing live audio from a microphone and playback to speaker using OpenAI's realtime API.
    - **Key Activities**:
-     - Utilizes `pyaudio` to capture real-time audio input.
+     - Utilizes `pyaudio` to capture real-time audio input and playback audio output.
      - Sends captured audio to `RealtimeAIClient` for processing.
-     - Manages the audio stream and executes control functions, cleanly ending operations on user command.
+     - Manages the events received from the RealtimeAIClient for further processing.
 
 ---
 
@@ -67,11 +61,11 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 1. **Installation**:
    - Install dependencies using a package manager:
      ```bash
-     pip install pyaudio numpy websockets
+     pip install pyaudio numpy websockets websocket-client
      ```
 
 2. **Setup**:
-   - Replace placeholders like `"YOUR_API_KEY"` in the sample script with real information.
+   - Replace placeholders like `"OPENAI_API_KEY"` in the sample script with real information.
    - Check system microphone access and settings to align with the project's audio requirements (e.g., 16bit PCM 24kHz mono).
 
 3. **Execution**:

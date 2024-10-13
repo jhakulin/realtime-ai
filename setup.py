@@ -14,6 +14,7 @@ setup(
         "pyaudio",
         "numpy",
         "websockets",
+        "websocket-client",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
