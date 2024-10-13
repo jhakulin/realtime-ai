@@ -59,10 +59,9 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 #### Getting Started
 
 1. **Installation**:
-   - Install dependencies using a package manager:
-     ```bash
-     pip install pyaudio numpy websockets websocket-client
-     ```
+   - Build realtime-ai wheel using following command: `python setup.py sdist bdist_wheel`
+   - Go to generated `dist` folder
+   - Install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
 
 2. **Setup**:
    - Replace placeholders like `"OPENAI_API_KEY"` in the sample script with real information.
