@@ -66,6 +66,7 @@ class RealtimeAIClient:
     def cancel_response(self):
         """Sends a response.cancel event to interrupt the model when playback is interrupted by user."""
         self._send_event_to_manager({
+            "event_id": self.service_manager._generate_event_id(),
             "type": "response.cancel"
         })
         logger.info("Client: Sent response.cancel event to server.")

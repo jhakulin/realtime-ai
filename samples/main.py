@@ -190,7 +190,7 @@ def main():
             logger.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
             return
 
-        audio_player = AudioPlayer()
+        audio_player = AudioPlayer(min_buffer_fill=3)
 
         options = RealtimeAIOptions(
             api_key=api_key,
