@@ -7,6 +7,7 @@ import time
 from typing import Optional
 from abc import ABC, abstractmethod
 from .vad import VoiceActivityDetector  # Ensure this is correctly imported based on your project structure
+import wave
 
 # Constants for PyAudio Configuration
 FORMAT = pyaudio.paInt16
@@ -33,11 +34,9 @@ class AudioCaptureEventHandler(ABC):
         pass
 
     @abstractmethod
-    def on_speech_start(self, audio_data: bytes):
+    def on_speech_start(self):
         """
         Called when speech starts.
-
-        :param audio_data: Buffered audio data at the start of speech.
         """
         pass
 
@@ -184,7 +183,8 @@ class AudioCapture:
         frames_per_buffer: int = FRAMES_PER_BUFFER,
         buffer_duration_sec: float = 1.0,
         cross_fade_duration_ms: int = 20,
-        vad_parameters: Optional[dict] = None
+        vad_parameters: Optional[dict] = None,
+        enable_wave_capture: bool = False
     ):
         """
         Initializes the AudioCapture instance.
@@ -208,6 +208,16 @@ class AudioCapture:
         self.cross_fade_duration_ms = cross_fade_duration_ms
         self.cross_fade_samples = int((self.cross_fade_duration_ms / 1000) * self.sample_rate)
         self.speech_started = False
+        self.enable_wave_capture = enable_wave_capture
+
+        if self.enable_wave_capture:
+            try:
+                self.wave_file = wave.open("microphone_output.wav", "wb")
+                self.wave_file.setnchannels(channels)
+                self.wave_file.setsampwidth(pyaudio.PyAudio().get_sample_size(FORMAT))
+                self.wave_file.setframerate(sample_rate)
+            except Exception as e:
+                logger.error(f"Error opening wave file: {e}")
 
         # Initialize VAD
         if vad_parameters is None:
@@ -299,11 +309,15 @@ class AudioCapture:
                     combined_audio = np.concatenate((current_buffer, audio_data))
 
                     logger.info("Sending buffered audio to client via event handler...")
-                    self.event_handler.on_speech_start(combined_audio.tobytes())
+                    self.event_handler.on_speech_start()
                     self.event_handler.send_audio_data(combined_audio.tobytes())
+                    if self.enable_wave_capture:
+                        self.wave_file.writeframes(combined_audio.tobytes())
                 else:
                     logger.info("Sending audio to client via event handler...")
                     self.event_handler.send_audio_data(audio_data.tobytes())
+                    if self.enable_wave_capture:
+                        self.wave_file.writeframes(audio_data.tobytes())
                 self.speech_started = True
             else:
                 logger.info("Speech ended")
@@ -361,5 +375,10 @@ class AudioCapture:
             self.stream.close()
             self.p.terminate()
             logger.info("AudioCapture stopped and input stream closed.")
+
+            if self.enable_wave_capture and self.wave_file:
+                self.wave_file.close()
+                logger.info("Wave file saved successfully.")
+
         except Exception as e:
             logger.error(f"Error closing AudioCapture: {e}")

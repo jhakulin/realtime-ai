@@ -2,7 +2,6 @@ import asyncio
 import logging
 import base64
 import os, sys
-import wave
 from typing import Any, Dict
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,26 +28,18 @@ else:
     for handler in logger.handlers:
         handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-ENABLE_WAVE_CAPTURE = False
-
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
-    """
-    Concrete implementation of AudioCaptureEventHandler to interact with RealtimeClient.
-    """
-
-    def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler", wave_file, event_loop):
+    def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler", event_loop):
         """
         Initializes the event handler.
         
         :param client: Instance of RealtimeClient.
         :param event_handler: Instance of MyRealtimeEventHandler
-        :param wave_file: File handler for wave file capture.
         :param event_loop: The asyncio event loop.
         """
         self.client = client
         self.event_handler = event_handler
-        self.wave_file = wave_file
         self.event_loop = event_loop
         self.cancelled = False
 
@@ -58,30 +49,22 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
 
         :param audio_data: Raw audio data in bytes.
         """
-        if ENABLE_WAVE_CAPTURE:
-            self.wave_file.writeframes(audio_data)
-
         logger.info("Sending audio data to the client.")
         asyncio.run_coroutine_threadsafe(self.client.send_audio(audio_data), self.event_loop)
 
-    def on_speech_start(self, audio_data: bytes):
+    def on_speech_start(self):
         """
         Handles actions to perform when speech starts.
 
-        :param audio_data: Buffered audio data at the start of speech.
         """
         logger.info("Speech has started.")
-
-        # Check if audio playback is ongoing
         if self.event_handler.is_audio_playing():
             logger.info(f"User started speaking while audio is playing.")
 
-            # clear input audio buffer and cancel response
             logger.info("Clearing input audio buffer.")
             asyncio.run_coroutine_threadsafe(self.client.clear_input_audio_buffer(), self.event_loop)
 
             logger.info("Cancelling response.")
-            # Schedule the cancellation coroutine in the event loop
             asyncio.run_coroutine_threadsafe(self.client.cancel_response(), self.event_loop)
             self.cancelled = True
 
@@ -98,7 +81,6 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         Handles actions to perform when speech ends.
         """
         logger.info("Speech has ended")
-        # request the client to generate a response
         logger.info("Requesting the client to generate a response.")
         asyncio.run_coroutine_threadsafe(self.client.generate_response(), self.event_loop)
 
@@ -107,9 +89,9 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
     def __init__(self, audio_player: AudioPlayer):
         super().__init__()
         self.audio_player = audio_player
-        self.lock = asyncio.Lock()  # Use asyncio.Lock for async operations
+        self.lock = asyncio.Lock()
         self.audio_buffer = []
-        self.client = None  # RealtimeAIClient instance
+        self.client = None
         self.current_item_id = None
         self.current_audio_content_index = None
         self._is_audio_playing = False
@@ -217,17 +199,12 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         logger.warning(f"Unhandled Event: {event_type} - {event_data}")
 
     def handle_audio_delta(self, event: ResponseAudioDelta):
-        """
-        Processes ResponseAudioDelta events by decoding base64 audio data and
-        enqueuing it for playback.
-        """
         delta_audio = event.delta
         if delta_audio:
             try:
                 audio_bytes = base64.b64decode(delta_audio)
-                #logger.info(f"Decoded audio delta of size {len(audio_bytes)} bytes.")
                 self.audio_player.enqueue_audio_data(audio_bytes)
-                self._is_audio_playing = True  # Set playback status
+                self._is_audio_playing = True
             except base64.binascii.Error as e:
                 logger.error(f"Failed to decode audio delta: {e}")
         else:
@@ -241,7 +218,6 @@ async def main():
     client = None
     audio_player = None
     audio_capture = None
-    wave_file = None
 
     try:
         # Retrieve OpenAI API key from environment variables
@@ -249,9 +225,6 @@ async def main():
         if not api_key:
             logger.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
             return
-
-        # Initialize AudioPlayer
-        audio_player = AudioPlayer()
 
         # Define RealtimeOptions
         options = RealtimeAIOptions(
@@ -286,29 +259,20 @@ async def main():
             bytes_per_sample=2
         )
 
+        # Initialize AudioPlayer
+        audio_player = AudioPlayer()
+
         # Initialize RealtimeAIClient with MyRealtimeEventHandler to handle events
         event_handler = MyRealtimeEventHandler(audio_player=audio_player)
         client = RealtimeAIClient(options, stream_options, event_handler)
         event_handler.set_client(client)
         await client.start()
 
-        if ENABLE_WAVE_CAPTURE:
-            # Initialize wave file for recording input audio
-            try:
-                wave_file = wave.open("microphone_output.wav", "wb")
-                wave_file.setnchannels(stream_options.channels)
-                wave_file.setsampwidth(stream_options.bytes_per_sample)
-                wave_file.setframerate(stream_options.sample_rate)
-            except Exception as e:
-                logger.error(f"Error opening wave file: {e}")
-
         loop = asyncio.get_running_loop()  # Get the current event loop
-
-        # Create the event handler with the client and audio_player
+        
         audio_capture_event_handler = MyAudioCaptureEventHandler(
             client=client,
             event_handler=event_handler,
-            wave_file=wave_file,
             event_loop=loop,
         )
 
@@ -340,23 +304,18 @@ async def main():
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
     finally:
+        if audio_player:
+            audio_player.close()
+
+        if audio_capture:
+            audio_capture.close()
+
         if client:
             try:
                 logger.info("Stopping client...")
                 await client.stop()
             except Exception as e:
                 logger.error(f"Error during client shutdown: {e}")
-
-        if ENABLE_WAVE_CAPTURE:
-            if wave_file:
-                wave_file.close()
-                logger.info("Wave file saved successfully.")
-
-        if audio_player:
-            audio_player.close()
-
-        if audio_capture:
-            audio_capture.close()
 
 
 if __name__ == "__main__":

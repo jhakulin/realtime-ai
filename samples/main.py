@@ -1,7 +1,6 @@
 import logging
 import base64
 import os
-import wave
 from typing import Any, Dict
 import threading
 
@@ -23,24 +22,34 @@ else:
     for handler in logger.handlers:
         handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
-ENABLE_WAVE_CAPTURE = False
-
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
-    def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler", wave_file):
+    def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler"):
+        """
+        Initializes the event handler.
+        
+        :param client: Instance of RealtimeClient.
+        :param event_handler: Instance of MyRealtimeEventHandler
+        :param event_loop: The asyncio event loop.
+        """
         self.client = client
         self.event_handler = event_handler
-        self.wave_file = wave_file
         self.cancelled = False
 
     def send_audio_data(self, audio_data: bytes):
-        if ENABLE_WAVE_CAPTURE:
-            self.wave_file.writeframes(audio_data)
+        """
+        Sends audio data to the RealtimeClient.
 
+        :param audio_data: Raw audio data in bytes.
+        """
         logger.info("Sending audio data to the client.")
         self.client.send_audio(audio_data)
 
-    def on_speech_start(self, audio_data: bytes):
+    def on_speech_start(self):
+        """
+        Handles actions to perform when speech starts.
+
+        """
         logger.info("Speech has started.")
         if self.event_handler.is_audio_playing():
             logger.info(f"User started speaking while audio is playing.")
@@ -61,6 +70,9 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             self.cancelled = False
 
     def on_speech_end(self):
+        """
+        Handles actions to perform when speech ends.
+        """
         logger.info("Speech has ended")
         logger.info("Requesting the client to generate a response.")
         self.client.generate_response()
@@ -75,7 +87,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         self.current_item_id = None
         self.current_audio_content_index = None
         self._is_audio_playing = False
-    
+
     def get_current_conversation_item_id(self):
         return self.current_item_id
     
@@ -179,19 +191,21 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
 
 def main():
+    """
+    Main function to initialize and run the audio processing and realtime client asynchronously.
+    """
     client = None
     audio_player = None
     audio_capture = None
-    wave_file = None
 
     try:
+        # Retrieve OpenAI API key from environment variables
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             logger.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
             return
 
-        audio_player = AudioPlayer(min_buffer_fill=3)
-
+        # Define RealtimeOptions
         options = RealtimeAIOptions(
             api_key=api_key,
             model="gpt-4o-realtime-preview-2024-10-01",
@@ -217,32 +231,28 @@ def main():
             max_output_tokens=None
         )
 
+        # Define AudioStreamOptions
         stream_options = AudioStreamOptions(
             sample_rate=24000,
             channels=1,
             bytes_per_sample=2
         )
 
+        # Initialize AudioPlayer
+        audio_player = AudioPlayer(min_buffer_fill=3)
+
+        # Initialize RealtimeAIClient with MyRealtimeEventHandler to handle events
         event_handler = MyRealtimeEventHandler(audio_player=audio_player)
         client = RealtimeAIClient(options, stream_options, event_handler)
         event_handler.set_client(client)
         client.start()
-
-        if ENABLE_WAVE_CAPTURE:
-            try:
-                wave_file = wave.open("microphone_output.wav", "wb")
-                wave_file.setnchannels(stream_options.channels)
-                wave_file.setsampwidth(stream_options.bytes_per_sample)
-                wave_file.setframerate(stream_options.sample_rate)
-            except Exception as e:
-                logger.error(f"Error opening wave file: {e}")
-
+        
         audio_capture_event_handler = MyAudioCaptureEventHandler(
             client=client,
-            event_handler=event_handler,
-            wave_file=wave_file
+            event_handler=event_handler
         )
 
+        # Initialize AudioCapture with the event handler
         audio_capture = AudioCapture(
             event_handler=audio_capture_event_handler,
             sample_rate=24000,
@@ -269,6 +279,10 @@ def main():
                 stop_event.wait(timeout=0.1)
             except KeyboardInterrupt:
                 logger.info("Recording stopped by user.")
+                if audio_player:
+                    audio_player.close()
+                if audio_capture:
+                    audio_capture.close()
                 stop_event.set()
 
     except Exception as e:
@@ -282,15 +296,6 @@ def main():
             except Exception as e:
                 logger.error(f"Error during client shutdown: {e}")
 
-        if ENABLE_WAVE_CAPTURE and wave_file:
-            wave_file.close()
-            logger.info("Wave file saved successfully.")
-
-        if audio_player:
-            audio_player.close()
-
-        if audio_capture:
-            audio_capture.close()
 
 if __name__ == "__main__":
     main()
