@@ -9,7 +9,8 @@ parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from utils.audio_processing import AudioPlayer, AudioCapture, AudioCaptureEventHandler
+from samples.utils.audio_playback import AudioPlayer
+from samples.utils.audio_capture import AudioCapture, AudioCaptureEventHandler
 from realtime_ai.aio.realtime_ai_client import RealtimeAIClient
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
