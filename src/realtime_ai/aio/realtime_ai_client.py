@@ -102,7 +102,7 @@ class RealtimeAIClient:
                 event = await self.service_manager.get_next_event()
                 if event:
                     await self._handle_event(event)
-                await asyncio.sleep(0.1)  # Small delay to prevent tight loop
+                await asyncio.sleep(0.05)  # Small delay to prevent tight loop
             except asyncio.CancelledError:
                 logger.info("RealtimeAIClient: Event consumption loop cancelled.")
                 break

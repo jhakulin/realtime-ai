@@ -12,7 +12,6 @@ from realtime_ai.models.audio_stream_options import AudioStreamOptions
 from realtime_ai.realtime_ai_event_handler import RealtimeAIEventHandler
 from realtime_ai.models.realtime_ai_events import *
 
-# Set up logging
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
