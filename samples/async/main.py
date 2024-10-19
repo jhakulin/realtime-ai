@@ -80,7 +80,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             asyncio.run_coroutine_threadsafe(self.client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000), self.event_loop)
 
             # Restart the audio player
-            self.event_handler.audio_player.drain_and_restart(clear_buffer=True)
+            self.event_handler.audio_player.drain_and_restart(clear_buffer=True, buffers_to_play_before_reset=3)
         else:
             logger.info("Assistant is not speaking, cancelling response is not required.")
             self.cancelled = False
@@ -273,7 +273,7 @@ async def main():
         )
 
         # Initialize AudioPlayer
-        audio_player = AudioPlayer()
+        audio_player = AudioPlayer(enable_wave_capture=False)
 
         # Initialize RealtimeAIClient with MyRealtimeEventHandler to handle events
         event_handler = MyRealtimeEventHandler(audio_player=audio_player)

@@ -192,5 +192,8 @@ class AudioPlayer:
                 self.play_limit = buffers_to_play_before_reset
                 logger.info(f"Configured to reset after playing {buffers_to_play_before_reset} buffers.")
             else:
+                if self.play_limit is not None:
+                    logger.info("Buffer is already configured for reset; ignoring new configuration.")
+                    return
                 self.play_limit = None
                 logger.info("Configured to drain and reset without buffer limit.")
