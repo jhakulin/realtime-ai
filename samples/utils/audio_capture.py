@@ -1,9 +1,6 @@
 import logging
 import pyaudio
 import numpy as np
-import queue
-import threading
-import time
 from typing import Optional
 from abc import ABC, abstractmethod
 from .vad import VoiceActivityDetector  # Ensure this is correctly imported based on your project structure
@@ -46,126 +43,6 @@ class AudioCaptureEventHandler(ABC):
         Called when speech ends.
         """
         pass
-
-
-class AudioPlayer:
-    """Handles audio playback for decoded audio data using PyAudio."""
-
-    def __init__(self, min_buffer_fill=3, max_buffer_size=50):
-        """
-        Initializes the AudioPlayer with a pre-fetch buffer threshold.
-
-        :param min_buffer_fill: Minimum number of buffers that should be filled before starting playback initially.
-        :param max_buffer_size: Maximum size of the buffer queue.
-        """
-        self.initial_min_buffer_fill = min_buffer_fill
-        self.min_buffer_fill = min_buffer_fill
-        self.buffer = queue.Queue(maxsize=max_buffer_size)
-        self.pyaudio_instance = pyaudio.PyAudio()
-        self.stream = None
-        self.stop_event = threading.Event()
-        self.reset_event = threading.Event()
-        self.playback_complete_event = threading.Event()
-        self.buffer_lock = threading.Lock()  # Unified lock for synchronization
-        self._initialize_stream()
-        self._start_thread()
-
-    def _initialize_stream(self):
-        """Initializes or reinitializes the PyAudio stream."""
-        if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-        self.stream = self.pyaudio_instance.open(
-            format=FORMAT,
-            channels=CHANNELS,
-            rate=RATE,
-            output=True,
-            frames_per_buffer=FRAMES_PER_BUFFER
-        )
-        logger.info("PyAudio stream initialized.")
-
-    def _start_thread(self):
-        """Starts the playback thread."""
-        self.thread = threading.Thread(target=self.playback_loop, daemon=True)
-        self.thread.start()
-        logger.info("Playback thread started.")
-
-    def playback_loop(self):
-        self.playback_complete_event.clear()
-        self.initial_buffer_fill()
-        while not self.stop_event.is_set():
-            if self.reset_event.is_set():
-                logger.debug("Reset event detected. Refilling buffer.")
-                self.initial_buffer_fill()
-                self.reset_event.clear()
-            try:
-                data = self.buffer.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            if data is None:
-                logger.info("Received sentinel. Exiting playback loop.")
-                break
-            logger.debug(f"Playing back audio. Buffer size before: {self.buffer.qsize()}")
-            self._write_data_to_stream(data)
-            logger.debug(f"Finished playing buffer. Buffer size after: {self.buffer.qsize()}")
-        logger.info("Playback thread has terminated.")
-        self.playback_complete_event.set()
-
-    def _write_data_to_stream(self, data: bytes):
-        try:
-            for i in range(0, len(data), FRAMES_PER_BUFFER):
-                chunk = data[i:i + FRAMES_PER_BUFFER]
-                self.stream.write(chunk)
-        except IOError as e:
-            logger.error(f"I/O error while writing to audio stream: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-
-    def initial_buffer_fill(self):
-        logger.debug("Starting initial buffer fill.")
-        while True:
-            with self.buffer_lock:
-                current_size = self.buffer.qsize()
-            if current_size >= self.min_buffer_fill or self.stop_event.is_set():
-                break
-            logger.debug(f"Waiting for buffer to fill. Current size: {current_size}")
-            time.sleep(0.01)
-        logger.debug("Initial buffer fill complete.")
-
-    def enqueue_audio_data(self, audio_data: bytes):
-        try:
-            self.buffer.put(audio_data, timeout=1)
-            logger.debug(f"Enqueued audio data. Queue size: {self.buffer.qsize()}")
-        except queue.Full:
-            logger.warning("Failed to enqueue audio data: Buffer full.")
-
-    def close(self):
-        logger.info("Closing AudioPlayer.")
-        self.stop_event.set()
-        self.buffer.put(None)
-        self.playback_complete_event.wait(timeout=5)
-        self.thread.join(timeout=5)
-        if self.stream.is_active():
-            self.stream.stop_stream()
-        self.stream.close()
-        self.pyaudio_instance.terminate()
-        logger.info("AudioPlayer stopped and resources released.")
-
-    def drain_and_restart(self):
-        """Plays all remaining buffers and resets the player to its initial state."""
-        logger.info("Draining remaining audio data before reset.")
-        while True:
-            with self.buffer_lock:
-                buffer_empty = self.buffer.empty()
-            if buffer_empty:
-                break
-            logger.debug(f"Waiting for buffer to drain. Buffer empty: {buffer_empty}")
-            time.sleep(0.05)
-        logger.info("All buffers played. Proceeding to reset.")
-        self.reset_event.set()
-        with self.buffer_lock:
-            self.min_buffer_fill = self.initial_min_buffer_fill
-        logger.info("AudioPlayer reset initiated.")
 
 
 class AudioCapture:
@@ -278,7 +155,7 @@ class AudioCapture:
         # Process VAD to detect speech
         try:
             speech_detected, is_speech = self.vad.process_audio_chunk(audio_data)
-            logger.debug(f"Speech detected: {speech_detected}, is_speech: {is_speech}")
+            #logger.debug(f"Speech detected: {speech_detected}, is_speech: {is_speech}")
         except Exception as e:
             logger.error(f"Error processing VAD: {e}")
             speech_detected, is_speech = False, False

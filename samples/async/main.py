@@ -9,24 +9,30 @@ parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from utils.audio_processing import AudioPlayer, AudioCapture, AudioCaptureEventHandler
+from utils.audio_playback import AudioPlayer
+from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
 from realtime_ai.aio.realtime_ai_client import RealtimeAIClient
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
 from realtime_ai.aio.realtime_ai_event_handler import RealtimeAIEventHandler
 from realtime_ai.models.realtime_ai_events import *
 
-# Set up logging
-# Set the level for other modules to ERROR to suppress their logs
-logging.getLogger("audio_processing").setLevel(logging.ERROR)
-logging.getLogger("openai_realtime").setLevel(logging.ERROR)
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]  # Streaming logs to the console
+)
 
+# Specific loggers for mentioned packages
+logging.getLogger("utils.audio_playback").setLevel(logging.DEBUG)
+logging.getLogger("utils.audio_capture").setLevel(logging.ERROR)
+logging.getLogger("utils.vad").setLevel(logging.ERROR)
+logging.getLogger("realtime_ai").setLevel(logging.ERROR)
+logging.getLogger("websockets.client").setLevel(logging.ERROR)
+
+# Root logger for general logging
 logger = logging.getLogger()
-if not logger.hasHandlers():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-else:
-    for handler in logger.handlers:
-        handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
@@ -72,6 +78,9 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             current_audio_content_index = self.event_handler.get_current_audio_content_id()
             logger.info(f"Truncate the current audio, current item ID: {current_item_id}, current audio content index: {current_audio_content_index}")
             asyncio.run_coroutine_threadsafe(self.client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000), self.event_loop)
+
+            # Restart the audio player
+            self.event_handler.audio_player.drain_and_restart(clear_buffer=True, buffers_to_play_before_reset=3)
         else:
             logger.info("Assistant is not speaking, cancelling response is not required.")
             self.cancelled = False
@@ -88,13 +97,17 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
 class MyRealtimeEventHandler(RealtimeAIEventHandler):
     def __init__(self, audio_player: AudioPlayer):
         super().__init__()
-        self.audio_player = audio_player
+        self._audio_player = audio_player
         self.lock = asyncio.Lock()
         self.audio_buffer = []
         self.client = None
         self.current_item_id = None
         self.current_audio_content_index = None
         self._is_audio_playing = False
+
+    @property
+    def audio_player(self):
+        return self._audio_player
 
     def get_current_conversation_item_id(self):
         return self.current_item_id
@@ -151,7 +164,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
             #await self.client.clear_input_audio_buffer()
             # Update audio playback status
             self._is_audio_playing = False
-        self.audio_player.drain_and_restart()
+        self._audio_player.drain_and_restart()
 
     async def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone) -> None:
         logger.info(f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}")
@@ -203,7 +216,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         if delta_audio:
             try:
                 audio_bytes = base64.b64decode(delta_audio)
-                self.audio_player.enqueue_audio_data(audio_bytes)
+                self._audio_player.enqueue_audio_data(audio_bytes)
                 self._is_audio_playing = True
             except base64.binascii.Error as e:
                 logger.error(f"Failed to decode audio delta: {e}")
@@ -260,7 +273,7 @@ async def main():
         )
 
         # Initialize AudioPlayer
-        audio_player = AudioPlayer()
+        audio_player = AudioPlayer(enable_wave_capture=False)
 
         # Initialize RealtimeAIClient with MyRealtimeEventHandler to handle events
         event_handler = MyRealtimeEventHandler(audio_player=audio_player)

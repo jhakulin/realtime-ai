@@ -148,7 +148,9 @@ class RealtimeAIServiceManager:
     async def clear_event_queue(self):
         """Clears all events in the event queue."""
         try:
-            await self.event_queue.queue.clear()
+            while not self.event_queue.empty():
+                await self.event_queue.get()
+                self.event_queue.task_done()
             logger.info("RealtimeAIServiceManager: Event queue cleared.")
         except Exception as e:
             logger.error(f"RealtimeAIServiceManager: Failed to clear event queue: {e}")

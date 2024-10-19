@@ -101,7 +101,7 @@ class RealtimeAIClient:
                 if event:
                     self._handle_event(event)
                 # Insert a slight delay or make this blocking based on incoming events
-                threading.Event().wait(timeout=0.1)
+                threading.Event().wait(timeout=0.05)
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error in consume_events: {e}")
                 break
