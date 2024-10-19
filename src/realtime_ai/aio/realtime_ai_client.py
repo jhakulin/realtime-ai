@@ -71,6 +71,10 @@ class RealtimeAIClient:
         await self.service_manager.send_event(cancel_event)
         logger.info("Client: Sent response.cancel event to server.")
 
+        # Clear the event queue in the service manager
+        await self.service_manager.clear_event_queue()
+        logger.info("RealtimeAIClient: Event queue cleared after cancellation.")
+
     async def truncate_response(self, item_id: str, content_index: int, audio_end_ms: int):
         """Sends a conversation.item.truncate event to truncate the response."""
         truncate_event = {

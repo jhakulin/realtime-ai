@@ -145,6 +145,14 @@ class RealtimeAIServiceManager:
             logger.warning(f"RealtimeAIServiceManager: Unknown message type received: {event_type}")
         return None
 
+    async def clear_event_queue(self):
+        """Clears all events in the event queue."""
+        try:
+            await self.event_queue.queue.clear()
+            logger.info("RealtimeAIServiceManager: Event queue cleared.")
+        except Exception as e:
+            logger.error(f"RealtimeAIServiceManager: Failed to clear event queue: {e}")
+
     def _get_event_class(self, event_type: str) -> Optional[Type[EventBase]]:
         event_mapping = {
             "error": ErrorEvent,
