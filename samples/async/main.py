@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import base64
-import os, sys
+import os, sys, json
 from typing import Any, Dict
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -11,11 +11,13 @@ if parent_dir not in sys.path:
 
 from utils.audio_playback import AudioPlayer
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
+from utils.function_tool import FunctionTool
 from realtime_ai.aio.realtime_ai_client import RealtimeAIClient
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
 from realtime_ai.aio.realtime_ai_event_handler import RealtimeAIEventHandler
 from realtime_ai.models.realtime_ai_events import *
+from user_functions import user_functions
 
 # Configure logging
 logging.basicConfig(
@@ -95,32 +97,32 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
 
 
 class MyRealtimeEventHandler(RealtimeAIEventHandler):
-    def __init__(self, audio_player: AudioPlayer):
+    def __init__(self, audio_player: AudioPlayer, functions: FunctionTool):
         super().__init__()
         self._audio_player = audio_player
-        self.lock = asyncio.Lock()
-        self.audio_buffer = []
-        self.client = None
-        self.current_item_id = None
-        self.current_audio_content_index = None
+        self._lock = asyncio.Lock()
+        self._client = None
+        self._current_item_id = None
+        self._current_audio_content_index = None
         self._is_audio_playing = False
+        self._call_id_to_function_name = {}
+        self._functions = functions
 
     @property
     def audio_player(self):
         return self._audio_player
 
     def get_current_conversation_item_id(self):
-        return self.current_item_id
+        return self._current_item_id
     
     def get_current_audio_content_id(self):
-        return self.current_audio_content_index
+        return self._current_audio_content_index
     
     def is_audio_playing(self):
         return self._is_audio_playing
     
     def set_client(self, client: RealtimeAIClient):
-        self.client = client
-        logger.info("RealtimeAIClient has been set in MyRealtimeEventHandler.")
+        self._client = client
 
     async def on_error(self, event: ErrorEvent) -> None:
         logger.error(f"Error occurred: {event.error.message}")
@@ -142,8 +144,8 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     async def on_response_audio_delta(self, event: ResponseAudioDelta) -> None:
         logger.info(f"Received audio delta for Response ID {event.response_id}, Item ID {event.item_id}, Content Index {event.content_index}")
-        self.current_item_id = event.item_id
-        self.current_audio_content_index = event.content_index
+        self._current_item_id = event.item_id
+        self._current_audio_content_index = event.content_index
         self.handle_audio_delta(event)
 
     async def on_response_audio_transcript_delta(self, event: ResponseAudioTranscriptDelta) -> None:
@@ -158,12 +160,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     async def on_response_audio_done(self, event: ResponseAudioDone) -> None:
         logger.info(f"Audio done for response ID {event.response_id}, item ID {event.item_id}")
-        if self.client:
-            # Clear the input audio buffer after audio is done
-            #logger.info("Clearing input audio buffer.")
-            #await self.client.clear_input_audio_buffer()
-            # Update audio playback status
-            self._is_audio_playing = False
+        self._is_audio_playing = False
         self._audio_player.drain_and_restart()
 
     async def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone) -> None:
@@ -180,8 +177,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     async def on_response_done(self, event: ResponseDone) -> None:
         logger.info(f"Response completed with status '{event.response.get('status')}' and ID '{event.response.get('id')}'")
-        # Update audio playback status
-        # self._is_audio_playing = False
 
     async def on_session_created(self, event: SessionCreated) -> None:
         logger.info(f"Session created: {event.session}")
@@ -191,16 +186,25 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     async def on_input_audio_buffer_speech_started(self, event: InputAudioBufferSpeechStarted) -> None:
         logger.info(f"Speech started at {event.audio_start_ms}ms for item ID {event.item_id}")
-        
-        #if self._is_audio_playing:
-        #    logger.info("Clearing input audio buffer.")
-        #    await self.client.clear_input_audio_buffer()
-
-        #    logger.info("Audio playback is ongoing. Sending response cancel event to client.")
-        #    await self.client.cancel_response()
 
     async def on_response_output_item_added(self, event: ResponseOutputItemAdded) -> None:
         logger.info(f"Output item added for response ID {event.response_id} with item: {event.item}")
+        
+        if event.item.get("type") == "function_call":
+            call_id = event.item.get("call_id")
+            function_name = event.item.get("name")
+            
+            if call_id and function_name:
+                # Properly acquire the lock with 'await' and spread the usage over two lines
+                await self._lock.acquire()  # Wait until the lock is available, then acquire it
+                try:
+                    self._call_id_to_function_name[call_id] = function_name
+                    logger.debug(f"Registered function call. Call ID: {call_id}, Function Name: {function_name}")
+                finally:
+                    # Ensure the lock is released even if an exception occurs
+                    self._lock.release()
+            else:
+                logger.warning("Function call item missing 'call_id' or 'name' fields.")
 
     async def on_response_function_call_arguments_delta(self, event: ResponseFunctionCallArgumentsDelta) -> None:
         logger.info(f"Function call arguments delta for call ID {event.call_id}: {event.delta}")
@@ -208,7 +212,32 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
     async def on_response_function_call_arguments_done(self, event: ResponseFunctionCallArgumentsDone) -> None:
         logger.info(f"Function call arguments done for call ID {event.call_id} with arguments: {event.arguments}")
 
-    async def on_unhandled_event(self, event_type: str, event_data: Dict[str, Any]) -> None:
+        call_id = event.call_id
+        arguments_str = event.arguments
+
+        # Acquire lock using asynchronous method
+        await self._lock.acquire()
+        try:
+            function_name = self._call_id_to_function_name.pop(call_id, None)
+        finally:
+            # Make sure the lock is released even if an exception is raised
+            self._lock.release()
+
+        if not function_name:
+            logger.error(f"No function name found for call ID: {call_id}")
+            return
+
+        try:
+            function_output = self._functions.execute(function_name, arguments_str)
+            logger.info(f"Function output for call ID {call_id}: {function_output}")
+            
+            # Assuming generate_response_from_function_call is an async method
+            await self._client.generate_response_from_function_call(call_id, function_output)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse arguments for call ID {call_id}: {e}")
+            return
+
+    def on_unhandled_event(self, event_type: str, event_data: Dict[str, Any]):
         logger.warning(f"Unhandled Event: {event_type} - {event_data}")
 
     def handle_audio_delta(self, event: ResponseAudioDelta):
@@ -222,6 +251,25 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
                 logger.error(f"Failed to decode audio delta: {e}")
         else:
             logger.warning("Received 'ResponseAudioDelta' event without 'delta' field.")
+
+
+def get_vad_configuration(use_server_vad=False):
+    """
+    Configures the VAD settings based on the specified preference.
+
+    :param use_server_vad: Boolean indicating whether to use server-side VAD.
+                           Default is False for local VAD.
+    :return: Dictionary representing the VAD configuration suitable for RealtimeAIOptions.
+    """
+    if use_server_vad:
+        return {
+            "type": "server_vad",
+            "threshold": 0.5,
+            "prefix_padding_ms": 300,
+            "silence_duration_ms": 200
+        }
+    else:
+        return None  # Local VAD typically requires no special configuration
 
 
 async def main():
@@ -239,27 +287,16 @@ async def main():
             logger.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
             return
 
+        functions = FunctionTool(functions=user_functions)
+
         # Define RealtimeOptions
         options = RealtimeAIOptions(
             api_key=api_key,
             model="gpt-4o-realtime-preview-2024-10-01",
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Respond concisely. If user asks to tell story, tell story very shortly.",
-            turn_detection=None,
-            tools=[
-                {
-                    "type": "function",
-                    "name": "get_weather",
-                    "description": "Get the current weather for a location.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "location": {"type": "string"}
-                        },
-                        "required": ["location"]
-                    }
-                }
-            ],
+            turn_detection=get_vad_configuration(),
+            tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
             max_output_tokens=None
@@ -276,7 +313,7 @@ async def main():
         audio_player = AudioPlayer(enable_wave_capture=False)
 
         # Initialize RealtimeAIClient with MyRealtimeEventHandler to handle events
-        event_handler = MyRealtimeEventHandler(audio_player=audio_player)
+        event_handler = MyRealtimeEventHandler(audio_player=audio_player, functions=functions)
         client = RealtimeAIClient(options, stream_options, event_handler)
         event_handler.set_client(client)
         await client.start()
@@ -304,7 +341,8 @@ async def main():
                 "silence_ratio": 1.5,
                 "min_speech_duration": 0.3,
                 "min_silence_duration": 0.3
-            }
+            },
+            enable_wave_capture=False
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
