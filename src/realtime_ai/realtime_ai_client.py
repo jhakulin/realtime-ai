@@ -16,7 +16,7 @@ class RealtimeAIClient:
     Manages overall interaction with OpenAI's Realtime API.
     """
     def __init__(self, options: RealtimeAIOptions, stream_options: AudioStreamOptions, event_handler: RealtimeAIEventHandler):
-        self.options = options
+        self._options = options
         self.service_manager = RealtimeAIServiceManager(options)
         self.audio_stream_manager = AudioStreamManager(stream_options, self.service_manager)
         self.event_handler = event_handler
@@ -93,6 +93,38 @@ class RealtimeAIClient:
         })
         logger.info("Client: Sent input_audio_buffer.clear event to server.")
 
+    def generate_response_from_function_call(self, call_id: str, function_output: str):
+        """
+        Sends a conversation.item.create message as a function call output and optionally triggers a model response.
+        
+        :param call_id: The ID of the function call.
+        :param name: The name of the function being called.
+        :param arguments: The arguments used for the function call, in stringified JSON.
+        :param function_output: The output of the function call.
+        """
+
+        # Create the function call output event
+        item_create_event = {
+            "event_id": self.service_manager._generate_event_id(),
+            "type": "conversation.item.create",
+            "item": {
+                "id": "1234", # Unique item ID
+                "type": "function_call_output",
+                "call_id": call_id,
+                "output": function_output,
+            }
+        }
+
+        # Send the function call output event
+        self._send_event_to_manager(item_create_event)
+        logger.info("Function call output event sent.")
+
+        self._send_event_to_manager({
+            "event_id": self.service_manager._generate_event_id(),
+            "type": "response.create",
+            "response": {"modalities": ["text", "audio"]}
+        })
+
     def _consume_events(self):
         """Consume events from the service manager."""
         while self.is_running:
@@ -123,3 +155,7 @@ class RealtimeAIClient:
     def _send_event_to_manager(self, event):
         """Helper method to send an event to the manager."""
         self.service_manager.send_event(event)
+
+    @property
+    def options(self):
+        return self._options
