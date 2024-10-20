@@ -4,14 +4,14 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 
 ---
 
-### API usage
+## Example API usage
 
 ```python
-from realtime_ai.realtime_ai_client import RealtimeAIClient
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
-from realtime_ai.realtime_ai_event_handler import RealtimeAIEventHandler
 from realtime_ai.models.realtime_ai_events import *
+from realtime_ai.realtime_ai_client import RealtimeAIClient
+from realtime_ai.realtime_ai_event_handler import RealtimeAIEventHandler
 from user_functions import user_functions
 
 # Setup your own functions
@@ -19,8 +19,8 @@ functions = FunctionTool(functions=user_functions)
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
    # Implementation of AudioCaptureEventHandler
-   # Handles audio callbacks for user's audio capture and sends audio data to RealtimeClient
-   # Detects speech start and end for response generation and interruption
+   # Handles audio callbacks for user's audio capture and sends audio data to RealtimeClient after speech has been detected.
+   # Handles speech start and end events from the local voice activity detector for response generation and interruption.
 
 class MyRealtimeEventHandler(RealtimeAIEventHandler):
    # Implementation of RealtimeAIEventHandler
@@ -46,16 +46,15 @@ stream_options = AudioStreamOptions(
    bytes_per_sample=2
 )
 
-# Initialize AudioPlayer to start waiting for audio to play
+# Initialize AudioPlayer to start waiting for audio data to play
 audio_player = AudioPlayer()
 
-# Initialize RealtimeAIClient with event handler, creates websocket connection to service and ready to handle user's audio
+# Initialize RealtimeAIClient with event handler, creates websocket connection to service and set up to handle user's audio
 event_handler = MyRealtimeEventHandler(audio_player=audio_player, functions=functions)
 client = RealtimeAIClient(options, stream_options, event_handler)
-event_handler.set_client(client)
 client.start()
 
-# Initialize AudioCapture with the event handler
+# Initialize AudioCapture with the event handler and starts listening for user's speech
 audio_capture_event_handler = MyAudioCaptureEventHandler(
    client=client,
    event_handler=event_handler
@@ -63,9 +62,9 @@ audio_capture_event_handler = MyAudioCaptureEventHandler(
 audio_capture = AudioCapture(audio_capture_event_handler, ...)
 ```
 
-### Installation
+## Installation
 
-1. **Installation**:
+1. **Build and install the wheel**:
    - Build realtime-ai wheel using following command: `python setup.py sdist bdist_wheel`
    - Go to generated `dist` folder
    - Install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
@@ -79,10 +78,6 @@ audio_capture = AudioCapture(audio_capture_event_handler, ...)
      ```bash
      python samples/main.py
      ```
-
-4. **Handling**:
-   - Use the logger outputs to ensure successful connections and audio data transmissions.
-   - Dive into provided methods to insert custom logic or explore further improvements.
 
 ## Contributions
 
