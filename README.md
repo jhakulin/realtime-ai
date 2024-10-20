@@ -4,57 +4,66 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 
 ---
 
-#### Key Components
+### API usage
 
-1. **RealtimeAIClient**
-   - **Purpose**: Acts as the high-level orchestrator, integrating with service and audio managers for comprehensive functionality.
-   - **Main Features**:
-     - Coordinates the lifecycle and interactions among different managers.
-     - Provides asynchronous and synchronous methods to start and stop the client.
-     - Handles audio input and process appropriate events back to the application.
+```python
+from realtime_ai.realtime_ai_client import RealtimeAIClient
+from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
+from realtime_ai.models.audio_stream_options import AudioStreamOptions
+from realtime_ai.realtime_ai_event_handler import RealtimeAIEventHandler
+from realtime_ai.models.realtime_ai_events import *
+from user_functions import user_functions
 
-2. **RealtimeAIOptions**
-   - **Purpose**: Encapsulates configuration parameters for the OpenAI API, such as API keys, model choices etc.
+# Setup your own functions
+functions = FunctionTool(functions=user_functions)
 
-3. **RealtimeAIServiceManager**
-   - **Purpose**: Interfaces with the WebSocketManager to handle event processing and communication logic.
-   - **Main Features**:
-     - Sends initial setup instructions to the API on connection.
-     - Queues incoming events for later processing.
-     - Handles message parsing based on received data types.
+class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
+   # Implementation of AudioCaptureEventHandler
+   # Handles audio callbacks for user's audio capture and sends audio data to RealtimeClient
+   # Detects speech start and end for response generation and interruption
 
-4. **AudioStreamManager**
-   - **Purpose**: Streams real-time audio data to the OpenAI Realtime service via RealtimeServiceManager (which sends the data to websocket)
-   - **Main Features**:
-     - Uses queues to manage audio data buffering.
-     - Encodes audio into an acceptable format and sends it to the API.
-     - Offers controls to start and stop audio streaming.
+class MyRealtimeEventHandler(RealtimeAIEventHandler):
+   # Implementation of RealtimeAIEventHandler
+   # Handles server events from the OpenAI Realtime service, audio playback data handling, function calling etc.
 
-5. **WebSocketManager**
-   - **Purpose**: Manages WebSocket connections, providing stability through reconnection strategies.
-   - **Main Features**:
-     - Establishes and maintains WebSocket connections.
-     - Both sends and receives data from the OpenAI API.
+# Define RealtimeAIOptions for OpenAI Realtime service configuration
+options = RealtimeAIOptions(
+   api_key=api_key,
+   model="gpt-4o-realtime-preview-2024-10-01",
+   modalities=["audio", "text"],
+   instructions="You are a helpful assistant. Respond concisely.",
+   turn_detection=None, # or server vad
+   tools=functions.definitions,
+   tool_choice="auto",
+   temperature=0.8,
+   max_output_tokens=None
+)
 
-6. **Sample Script (`main.py`)**
-   - **Purpose**: Demonstrates capturing live audio from a microphone and playback to speaker using OpenAI's realtime API.
-   - **Key Activities**:
-     - Utilizes `pyaudio` to capture real-time audio input and playback audio output.
-     - Sends captured audio to `RealtimeAIClient` for processing.
-     - Manages the events received from the RealtimeAIClient for further processing.
+# Define AudioStreamOptions (currently only 16bit PCM 24kHz mono is supported)
+stream_options = AudioStreamOptions(
+   sample_rate=24000,
+   channels=1,
+   bytes_per_sample=2
+)
 
----
+# Initialize AudioPlayer to start waiting for audio to play
+audio_player = AudioPlayer()
 
-#### Summary of Features
+# Initialize RealtimeAIClient with event handler, creates websocket connection to service and ready to handle user's audio
+event_handler = MyRealtimeEventHandler(audio_player=audio_player, functions=functions)
+client = RealtimeAIClient(options, stream_options, event_handler)
+event_handler.set_client(client)
+client.start()
 
-- **OpenAI's Realtime API Interaction**: Structured to support real-time interactions with OpenAI's services.
-- **Audio Handling**: Integrates audio processing through `pyaudio` and NumPy libraries, complying with OpenAI API's audio format requirements.
-- **Asynchronous and Synchronous Design**: Takes advantage of `asyncio` and threading to handle WebSocket communications efficiently.
-- **Scalability and Modularity**: Each component operates independently, fostering scalability and maintainability for various real-time audio applications.
+# Initialize AudioCapture with the event handler
+audio_capture_event_handler = MyAudioCaptureEventHandler(
+   client=client,
+   event_handler=event_handler
+)
+audio_capture = AudioCapture(audio_capture_event_handler, ...)
+```
 
----
-
-#### Getting Started
+### Installation
 
 1. **Installation**:
    - Build realtime-ai wheel using following command: `python setup.py sdist bdist_wheel`
