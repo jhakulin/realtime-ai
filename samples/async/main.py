@@ -101,10 +101,9 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         super().__init__()
         self._audio_player = audio_player
         self._lock = asyncio.Lock()
-        self.audio_buffer = []
-        self.client = None
-        self.current_item_id = None
-        self.current_audio_content_index = None
+        self._client = None
+        self._current_item_id = None
+        self._current_audio_content_index = None
         self._is_audio_playing = False
         self._call_id_to_function_name = {}
         self._functions = functions
@@ -114,10 +113,10 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         return self._audio_player
 
     def get_current_conversation_item_id(self):
-        return self.current_item_id
+        return self._current_item_id
     
     def get_current_audio_content_id(self):
-        return self.current_audio_content_index
+        return self._current_audio_content_index
     
     def is_audio_playing(self):
         return self._is_audio_playing
@@ -145,8 +144,8 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     async def on_response_audio_delta(self, event: ResponseAudioDelta) -> None:
         logger.info(f"Received audio delta for Response ID {event.response_id}, Item ID {event.item_id}, Content Index {event.content_index}")
-        self.current_item_id = event.item_id
-        self.current_audio_content_index = event.content_index
+        self._current_item_id = event.item_id
+        self._current_audio_content_index = event.content_index
         self.handle_audio_delta(event)
 
     async def on_response_audio_transcript_delta(self, event: ResponseAudioTranscriptDelta) -> None:
