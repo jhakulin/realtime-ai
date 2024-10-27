@@ -274,7 +274,8 @@ def main():
             tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
-            max_output_tokens=None
+            max_output_tokens=None,
+            voice="echo",
         )
 
         # Define AudioStreamOptions

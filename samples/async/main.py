@@ -228,7 +228,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
             return
 
         try:
-            function_output = self._functions.execute(function_name, arguments_str)
+            function_output = await asyncio.threads.to_thread(self._functions.execute, function_name, arguments_str)
             logger.info(f"Function output for call ID {call_id}: {function_output}")
             
             # Assuming generate_response_from_function_call is an async method

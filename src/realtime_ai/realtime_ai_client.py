@@ -1,5 +1,6 @@
 import threading, logging
-import queue
+import concurrent.futures
+import queue, time
 
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
@@ -24,7 +25,8 @@ class RealtimeAIClient:
         self.event_queue = queue.Queue()
         
         # Thread for consuming events
-        self._consume_thread = threading.Thread(target=self._consume_events)
+        self._consume_thread = threading.Thread(target=self._consume_events, daemon=True)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
     def start(self):
         """Starts the RealtimeAIClient."""
@@ -41,7 +43,8 @@ class RealtimeAIClient:
         self.is_running = False
         self.audio_stream_manager.stop_stream()
         self.service_manager.disconnect()
-        self._consume_thread.join()  # Ensure thread is closed before proceeding
+        self._consume_thread.join(timeout=5)
+        self.executor.shutdown(wait=True)  # Gracefully shut down the executor
         logger.info("RealtimeAIClient: Services stopped.")
 
     def send_audio(self, audio_data: bytes):
@@ -131,9 +134,9 @@ class RealtimeAIClient:
             try:
                 event = self.service_manager.get_next_event()
                 if event:
-                    self._handle_event(event)
-                # Insert a slight delay or make this blocking based on incoming events
-                threading.Event().wait(timeout=0.05)
+                    self.executor.submit(self._handle_event, event)
+                else:
+                    time.sleep(0.05)
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error in consume_events: {e}")
                 break
