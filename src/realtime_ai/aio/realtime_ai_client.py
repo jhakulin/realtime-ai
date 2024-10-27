@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
@@ -21,25 +22,40 @@ class RealtimeAIClient:
         self.audio_stream_manager = AudioStreamManager(stream_options, self.service_manager)
         self.event_handler = event_handler
         self.is_running = False
+        self._consume_task = None
 
     async def start(self):
         """Starts the RealtimeAIClient."""
-        self.is_running = True
-        try:
-            await self.service_manager.connect()  # Connect to the service initially
-            logger.info("RealtimeAIClient: Client started.")
+        if not self.is_running:
+            self.is_running = True
+            try:
+                await self.service_manager.connect()  # Connect to the service initially
+                logger.info("RealtimeAIClient: Client started.")
 
-            # Schedule asynchronous tasks without waiting for them explicitly here
-            asyncio.create_task(self._consume_events())
-        except Exception as e:
-            logger.error(f"RealtimeAIClient: Error during client start: {e}")
+                # Schedule the event consumption coroutine as a background task
+                self._consume_task = asyncio.create_task(self._consume_events())
+            except Exception as e:
+                logger.error(f"RealtimeAIClient: Error during client start: {e}")
+                self.is_running = False
 
     async def stop(self):
         """Stops the RealtimeAIClient gracefully."""
-        self.is_running = False
-        await self.audio_stream_manager.stop_stream()
-        await self.service_manager.disconnect()
-        logger.info("RealtimeAIClient: Services stopped.")
+        if self.is_running:
+            self.is_running = False
+            try:
+                await self.audio_stream_manager.stop_stream()
+                await self.service_manager.disconnect()
+                logger.info("RealtimeAIClient: Services stopped.")
+
+                if self._consume_task:
+                    # Cancel the consume_events task and wait for it to finish
+                    self._consume_task.cancel()
+                    try:
+                        await self._consume_task
+                    except asyncio.CancelledError:
+                        logger.info("RealtimeAIClient: consume_events task cancelled.")
+            except Exception as e:
+                logger.error(f"RealtimeAIClient: Error during client stop: {e}")
 
     async def send_audio(self, audio_data: bytes):
         """Sends audio data to the audio stream manager for processing."""
@@ -101,8 +117,6 @@ class RealtimeAIClient:
         and optionally triggers a model response.
         
         :param call_id: The ID of the function call.
-        :param name: The name of the function being called.
-        :param arguments: The arguments used for the function call, in stringified JSON.
         :param function_output: The output of the function call.
         """
 
@@ -111,39 +125,44 @@ class RealtimeAIClient:
             "event_id": self.service_manager._generate_event_id(),
             "type": "conversation.item.create",
             "item": {
-                "id": "1234", # Unique item ID
+                "id": str(uuid.uuid4()),  # Generate a unique item ID
                 "type": "function_call_output",
                 "call_id": call_id,
                 "output": function_output,
             }
         }
 
-        # Await the asynchronous event sending method
+        # Send the function call output event
         await self.service_manager.send_event(item_create_event)
         logger.info("Function call output event sent.")
 
+        # Create and send the response.create event
         response_event = {
             "event_id": self.service_manager._generate_event_id(),
             "type": "response.create",
             "response": {"modalities": ["text", "audio"]}
         }
-        
-        # Await the asynchronous event sending method
         await self.service_manager.send_event(response_event)
 
     async def _consume_events(self):
-        """Consume events from the service manager."""
-        while self.is_running:
-            try:
-                event = await self.service_manager.get_next_event()
-                if event:
-                    await self._handle_event(event)
-                await asyncio.sleep(0.05)  # Small delay to prevent tight loop
-            except asyncio.CancelledError:
-                logger.info("RealtimeAIClient: Event consumption loop cancelled.")
-                break
-            except Exception as e:
-                logger.error(f"RealtimeAIClient: Error in consume_events: {e}")
+        """Consume events from the service manager asynchronously."""
+        logger.info("RealtimeAIClient: Started consuming events.")
+        try:
+            while self.is_running:
+                try:
+                    event = await self.service_manager.get_next_event()
+                    if event:
+                        # Schedule the event handler as an independent task
+                        asyncio.create_task(self._handle_event(event))
+                    else:
+                        await asyncio.sleep(0.05)  # Small delay to prevent tight loop
+                except Exception as e:
+                    logger.error(f"RealtimeAIClient: Error in consume_events: {e}")
+                    await asyncio.sleep(1)  # Optional: Backoff on error to prevent rapid retries
+        except asyncio.CancelledError:
+            logger.info("RealtimeAIClient: consume_events loop has been cancelled.")
+        finally:
+            logger.info("RealtimeAIClient: Stopped consuming events.")
 
     async def _handle_event(self, event: EventBase):
         """Handles the received event based on its type using the event handler."""

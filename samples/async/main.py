@@ -82,7 +82,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             asyncio.run_coroutine_threadsafe(self.client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000), self.event_loop)
 
             # Restart the audio player
-            self.event_handler.audio_player.drain_and_restart(clear_buffer=True, buffers_to_play_before_reset=3)
+            self.event_handler.audio_player.drain_and_restart()
         else:
             logger.info("Assistant is not speaking, cancelling response is not required.")
             self.cancelled = False
@@ -104,7 +104,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         self._client = None
         self._current_item_id = None
         self._current_audio_content_index = None
-        self._is_audio_playing = False
         self._call_id_to_function_name = {}
         self._functions = functions
 
@@ -119,7 +118,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         return self._current_audio_content_index
     
     def is_audio_playing(self):
-        return self._is_audio_playing
+        return self._audio_player.is_audio_playing()
     
     def set_client(self, client: RealtimeAIClient):
         self._client = client
@@ -160,8 +159,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     async def on_response_audio_done(self, event: ResponseAudioDone) -> None:
         logger.info(f"Audio done for response ID {event.response_id}, item ID {event.item_id}")
-        self._is_audio_playing = False
-        self._audio_player.drain_and_restart()
 
     async def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone) -> None:
         logger.info(f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}")
@@ -228,7 +225,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
             return
 
         try:
-            function_output = self._functions.execute(function_name, arguments_str)
+            function_output = await asyncio.threads.to_thread(self._functions.execute, function_name, arguments_str)
             logger.info(f"Function output for call ID {call_id}: {function_output}")
             
             # Assuming generate_response_from_function_call is an async method
@@ -246,7 +243,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
             try:
                 audio_bytes = base64.b64decode(delta_audio)
                 self._audio_player.enqueue_audio_data(audio_bytes)
-                self._is_audio_playing = True
             except base64.binascii.Error as e:
                 logger.error(f"Failed to decode audio delta: {e}")
         else:

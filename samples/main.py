@@ -73,7 +73,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             self._client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000)
 
             # Restart the audio player
-            self._event_handler.audio_player.drain_and_restart(clear_buffer=True)
+            self._event_handler.audio_player.drain_and_restart()
 
     def on_speech_end(self):
         """
@@ -92,7 +92,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         self._functions = functions
         self._current_item_id = None
         self._current_audio_content_index = None
-        self._is_audio_playing = False
         self._call_id_to_function_name = {}
         self._lock = threading.Lock()
         self._client = None
@@ -108,7 +107,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         return self._current_audio_content_index
     
     def is_audio_playing(self):
-        return self._is_audio_playing
+        return self._audio_player.is_audio_playing()
     
     def set_client(self, client: RealtimeAIClient):
         self._client = client
@@ -149,8 +148,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 
     def on_response_audio_done(self, event: ResponseAudioDone):
         logger.info(f"Audio done for response ID {event.response_id}, item ID {event.item_id}")
-        self._is_audio_playing = False
-        self._audio_player.drain_and_restart()
 
     def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone):
         logger.info(f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}")
@@ -221,7 +218,6 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
             try:
                 audio_bytes = base64.b64decode(delta_audio)
                 self._audio_player.enqueue_audio_data(audio_bytes)
-                self._is_audio_playing = True
             except base64.binascii.Error as e:
                 logger.error(f"Failed to decode audio delta: {e}")
         else:
@@ -274,7 +270,8 @@ def main():
             tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
-            max_output_tokens=None
+            max_output_tokens=None,
+            voice="echo",
         )
 
         # Define AudioStreamOptions

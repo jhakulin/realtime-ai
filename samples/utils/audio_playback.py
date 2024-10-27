@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class AudioPlayer:
     """Handles audio playback for decoded audio data using PyAudio."""
 
-    def __init__(self, min_buffer_fill=3, max_buffer_size=100, enable_wave_capture=False):
+    def __init__(self, min_buffer_fill=3, max_buffer_size=0, enable_wave_capture=False):
         """
         Initializes the AudioPlayer with a pre-fetch buffer threshold.
 
@@ -179,7 +179,7 @@ class AudioPlayer:
                 logger.error(f"Error closing wave file for playback: {e}")
         logger.info("AudioPlayer stopped and resources released.")
 
-    def drain_and_restart(self, clear_buffer: bool = False, buffers_to_play_before_reset: int = 0):
+    def drain_and_restart(self, buffers_to_play_before_reset: int = 0):
         """
         Configures the player to play a specified number of buffers before resetting.
 
@@ -187,13 +187,19 @@ class AudioPlayer:
         :param buffers_to_play_before_reset: Number of buffers to play before resetting if clear_buffer is True.
         """
         with self.buffer_lock:
-            if clear_buffer:
-                self.buffers_played = 0  # Reset buffers played count
-                self.play_limit = buffers_to_play_before_reset
-                logger.info(f"Configured to reset after playing {buffers_to_play_before_reset} buffers.")
-            else:
-                if self.play_limit is not None:
-                    logger.info("Buffer is already configured for reset; ignoring new configuration.")
-                    return
-                self.play_limit = None
-                logger.info("Configured to drain and reset without buffer limit.")
+            self.buffers_played = 0  # Reset buffers played count
+            self.play_limit = buffers_to_play_before_reset
+            logger.info(f"Configured to reset after playing {buffers_to_play_before_reset} buffers.")
+
+    def is_audio_playing(self):
+        """
+        Checks if audio is currently playing.
+
+        :return: True if audio is playing, False otherwise.
+        """
+        with self.buffer_lock:
+            buffer_not_empty = not self.buffer.empty()
+        is_playing = buffer_not_empty
+        logger.debug(f"Checking if audio is playing: Buffer not empty = {buffer_not_empty}, "
+                     f"Is playing = {is_playing}")
+        return is_playing
