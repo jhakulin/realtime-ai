@@ -79,6 +79,40 @@ audio_capture = AudioCapture(audio_capture_event_handler, ...)
      python samples/main.py
      ```
 
+## Audio Configuration
+
+### Audio Configuration on Windows
+
+It is important to have functional Audio Echo Cancellation (AEC) on the device running the samples to ensure clear audio playback and recording. 
+For example, the Lenovo ThinkPad P16S has been tested and provides a reliable configuration with its **Microphone Array**.
+
+1. **Open Control Panel**:
+   - Press `Windows + R` to open the Run dialog.
+   - Type `control` and press `Enter` to open the Control Panel.
+
+2. **Navigate to Sound Settings**:
+   - In the Control Panel, click on **Hardware and Sound**.
+   - Click on **Sound** to open the Sound settings dialog.
+
+3. **Select Recording Device**:
+   - In the Sound settings window, navigate to the **Recording** tab.
+   - Locate and e.g. select **Microphone Array** from the list of recording devices. This setup is preferred for optimal performance and is known to work well on systems like the Lenovo ThinkPad P16S.
+   - Click **Properties** to open the Microphone Properties dialog for the selected device.
+
+4. **Enable Audio Enhancements**:
+   - In the Microphone Properties dialog, navigate to the **Advanced** tab.
+   - Under the **Signal Enhancements** section, look for the option labeled **Enable audio enhancements**.
+   - Check the box next to **Enable audio enhancements** to allow extra signal processing by the audio device.
+
+5. **Apply and Confirm Changes**:
+   - Click **Apply** to save the changes.
+   - Click **OK** to exit the Microphone Properties dialog.
+   - Click **OK** in the Sound settings window to close it.
+
+### Alternative Audio Options
+
+If you encounter issues with audio echo that cannot be resolved through configuration changes, consider using a headset with an integrated microphone and speakers. This setup naturally avoids problems with echo, as the audio output from the speakers is isolated from the microphone input. This can provide a more seamless audio experience without relying on device-based audio echo cancellation.
+
 ## Contributions
 
 Contributions in the form of issues or pull requests are welcome! Feel free to enhance functionalities, fix bugs, or improve documentation.
