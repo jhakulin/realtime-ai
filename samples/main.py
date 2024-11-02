@@ -67,10 +67,10 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             logger.info("Cancelling response.")
             self._client.cancel_response()
 
-            current_item_id = self._event_handler.get_current_conversation_item_id()
-            current_audio_content_index = self._event_handler.get_current_audio_content_id()
-            logger.info(f"Truncate the current audio, current item ID: {current_item_id}, current audio content index: {current_audio_content_index}")
-            self._client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000)
+            #current_item_id = self._event_handler.get_current_conversation_item_id()
+            #current_audio_content_index = self._event_handler.get_current_audio_content_id()
+            #logger.info(f"Truncate the current audio, current item ID: {current_item_id}, current audio content index: {current_audio_content_index}")
+            #self._client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000)
 
             # Restart the audio player
             self._event_handler.audio_player.drain_and_restart()
@@ -271,7 +271,7 @@ def main():
             tool_choice="auto",
             temperature=0.8,
             max_output_tokens=None,
-            voice="echo",
+            voice="ballad",
         )
 
         # Define AudioStreamOptions
@@ -309,7 +309,7 @@ def main():
                 "window_duration": 1.0,
                 "silence_ratio": 1.5,
                 "min_speech_duration": 0.3,
-                "min_silence_duration": 0.3
+                "min_silence_duration": 1.0
             },
             enable_wave_capture=False
         )
