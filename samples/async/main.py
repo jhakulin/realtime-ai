@@ -76,10 +76,10 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
             asyncio.run_coroutine_threadsafe(self.client.cancel_response(), self.event_loop)
             self.cancelled = True
 
-            current_item_id = self.event_handler.get_current_conversation_item_id()
-            current_audio_content_index = self.event_handler.get_current_audio_content_id()
-            logger.info(f"Truncate the current audio, current item ID: {current_item_id}, current audio content index: {current_audio_content_index}")
-            asyncio.run_coroutine_threadsafe(self.client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000), self.event_loop)
+            #current_item_id = self.event_handler.get_current_conversation_item_id()
+            #current_audio_content_index = self.event_handler.get_current_audio_content_id()
+            #logger.info(f"Truncate the current audio, current item ID: {current_item_id}, current audio content index: {current_audio_content_index}")
+            #asyncio.run_coroutine_threadsafe(self.client.truncate_response(item_id=current_item_id, content_index=current_audio_content_index, audio_end_ms=1000), self.event_loop)
 
             # Restart the audio player
             self.event_handler.audio_player.drain_and_restart()
@@ -295,7 +295,8 @@ async def main():
             tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
-            max_output_tokens=None
+            max_output_tokens=None,
+            voice="ballad",
         )
 
         # Define AudioStreamOptions
@@ -336,7 +337,7 @@ async def main():
                 "window_duration": 1.0,
                 "silence_ratio": 1.5,
                 "min_speech_duration": 0.3,
-                "min_silence_duration": 0.3
+                "min_silence_duration": 1.0
             },
             enable_wave_capture=False
         )

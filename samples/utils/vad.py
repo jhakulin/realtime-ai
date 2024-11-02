@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 class VoiceActivityDetector:
     def __init__(self, sample_rate, chunk_size, window_duration=1.0,
-                 silence_ratio=1.5, min_speech_duration=0.3, min_silence_duration=0.3):
+                 silence_ratio=1.5, min_speech_duration=0.3, min_silence_duration=1.0):
         """
         Initialize the Voice Activity Detector (VAD).
 
