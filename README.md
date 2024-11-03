@@ -133,7 +133,9 @@ Keyword recognition enables your application to listen for specific trigger word
 
 ### Setup
 
-The sample uses Azure CognitiveServices Speech SDK for keyword detection. For context and creating your own customer keywords, read the documentation under Azure for [Creating the Custom Keyword](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/custom-keyword-basics?pivots=programming-language-python) 
+The sample uses Azure CognitiveServices Speech SDK for keyword detection. For context and creating your own customer keywords, read the documentation under Azure for [Creating the Custom Keyword](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/custom-keyword-basics?pivots=programming-language-python).
+
+**NOTE** The audio configuration with Azure Speech Keyword Recognition must be 16kHz, mono, PCM.
 
 1. **Install Azure Speech SDK**
 
