@@ -4,7 +4,7 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 
 ### Key Features
 
-- **Real-time Audio Streaming**: Capture and stream audio data to OpenAI's Realtime WebSocket APIs for immediate analysis or transcription.
+- **Real-time Audio and Text Interaction**: Capture and stream audio data to OpenAI's Realtime WebSocket APIs, enabling seamless real-time conversations with the AI assistant through both speech and text, with the ability to interrupt the assistant for dynamic and interactive dialogue.
   
 - **Local Voice Activity Detection (VAD)**: The application incorporates a local voice activity detector to identify when speech starts and ends. This feature allows the system to efficiently manage audio data, ensuring that only relevant speech segments are processed and sent to the AI service. It helps in reducing unnecessary data transmission and processing, thereby optimizing performance and resource usage.
 
