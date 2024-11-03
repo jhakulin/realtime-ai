@@ -6,7 +6,7 @@ class AzureKeywordRecognizer:
     A class to recognize specific keywords from PCM audio streams using Azure Cognitive Services.
     """
 
-    def __init__(self, model_file: str, callback, sample_rate: int = 24000, bits_per_sample: int = 16, channels: int = 1):
+    def __init__(self, model_file: str, callback, sample_rate: int = 16000, bits_per_sample: int = 16, channels: int = 1):
         """
         Initializes the AzureKeywordRecognizer.
 
