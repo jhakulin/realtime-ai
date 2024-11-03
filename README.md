@@ -1,6 +1,20 @@
 ## Overview
 
-This Python project exemplifies a modular approach to interacting with OpenAI's Realtime WebSocket APIs. It enables the capture and processing of real-time audio by streaming it efficiently to the API for analysis or transcription.
+This Python project exemplifies a modular approach to interacting with OpenAI's Realtime WebSocket APIs. It enables the capture and processing of real-time audio by streaming it efficiently to the API for analysis or transcription. The application samples in this repository are designed to enhance user interaction through audio processing features, including local voice activity detection and keyword detection using Azure Speech Keyword Recognition.
+
+### Key Features
+
+- **Real-time Audio and Text Interaction**: Capture and stream audio data to OpenAI's Realtime WebSocket APIs, enabling seamless real-time conversations with the AI assistant through both speech and text, with the ability to interrupt the assistant for dynamic and interactive dialogue.
+  
+- **Local Voice Activity Detection (VAD)**: The application incorporates a local voice activity detector to identify when speech starts and ends. This feature allows the system to efficiently manage audio data, ensuring that only relevant speech segments are processed and sent to the AI service. It helps in reducing unnecessary data transmission and processing, thereby optimizing performance and resource usage.
+
+- **Keyword Detection**: Integrated with Azure Speech Services, the application supports keyword detection to trigger interactions with the AI assistant. By listening for specific trigger words (e.g., "Computer"), the system ensures that audio data is only sent to the assistant when necessary, enhancing privacy and reducing costs. This feature is particularly useful in scenarios where continuous listening is not feasible or desired.
+
+- **Modular Design**: The project is structured to allow easy customization and extension. Users can define their own functions and event handlers to tailor the application's behavior to specific needs.
+
+- **Multi-Modal Interaction**: Supports both audio and text modalities, enabling versatile interaction patterns with the AI assistant.
+
+- **Configurable AI Options**: Users can configure various AI options, such as model selection, temperature settings, and tool usage, to fine-tune the assistant's responses and behavior.
 
 ---
 
@@ -76,7 +90,7 @@ audio_capture = AudioCapture(audio_capture_event_handler, ...)
 3. **Execution**:
    - Run the script via command-line or an IDE:
      ```bash
-     python samples/main.py
+     python samples/sample_realtime_ai_with_local_vad.py
      ```
 
 ## Audio Configuration
@@ -112,6 +126,30 @@ For example, the Lenovo ThinkPad P16S has been tested and provides a reliable co
 ### Alternative Audio Options
 
 If you encounter issues with audio echo that cannot be resolved through configuration changes, consider using a headset with an integrated microphone and speakers. This setup naturally avoids problems with echo, as the audio output from the speakers is isolated from the microphone input. This can provide a more seamless audio experience without relying on device-based audio echo cancellation.
+
+## Keyword Recognition Configuration
+
+Keyword recognition enables your application to listen for specific trigger word (e.g., "Computer") to initiate interactions with the AI assistant, enhancing privacy and costs by ensuring that audio data is only sent to the assistant when necessary. The sample application `sample_realtime_ai_with_keyword_and_vad.py` implements a design where communication with the AI assistant starts only after a keyword ("Computer") has been detected, and continues without keyword detection until a period of configurable silence timeout and once timout happens, the keyword gets rearmed again.
+
+### Setup
+
+The sample uses Azure CognitiveServices Speech SDK for keyword detection. For context and creating your own customer keywords, read the documentation under Azure for [Creating the Custom Keyword](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/custom-keyword-basics?pivots=programming-language-python) 
+
+1. **Install Azure Speech SDK**
+
+   Install the Azure Speech SDK for Python using `pip`:
+
+   `pip install azure-cognitiveservices-speech`
+   
+2. **Run Sample For Quick Testing**:
+    The sample code in this repository uses the `.table` file from the [Azure Speech SDK samples](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/quickstart/csharp/uwp/keyword-recognizer/helloworld/Keyword).
+    This test model is configured for keyword `Computer`
+
+   - Run the script via command-line or an IDE:
+     ```bash
+     python samples/sample_realtime_ai_with_keyword_and_vad.py
+     ```
+   - To start conversation with an assistant, say keyword `Computer`.
 
 ## Contributions
 

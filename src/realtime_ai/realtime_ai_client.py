@@ -52,6 +52,26 @@ class RealtimeAIClient:
         logger.info("RealtimeAIClient: Queuing audio data for streaming.")
         self.audio_stream_manager.write_audio_buffer_sync(audio_data)  # Ensure this is a sync method in the audio_stream_manager
 
+    def send_text(self, text: str):
+        """Sends text input to the service manager.
+        """
+        event = {
+            "event_id": self.service_manager._generate_event_id(),
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": text
+                    }
+                ]
+            }
+        }
+        self._send_event_to_manager(event)
+        logger.info("RealtimeAIClient: Sent text input to server.")
+
     def generate_response(self):
         """Sends a response.create event to generate a response."""
         logger.info("RealtimeAIClient: Generating response.")
