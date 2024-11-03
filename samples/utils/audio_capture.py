@@ -3,7 +3,8 @@ import pyaudio
 import numpy as np
 from typing import Optional
 from abc import ABC, abstractmethod
-from .vad import VoiceActivityDetector  # Ensure this is correctly imported based on your project structure
+from .vad import VoiceActivityDetector
+from .azure_keyword_recognizer import AzureKeywordRecognizer
 import wave
 
 # Constants for PyAudio Configuration
@@ -44,6 +45,15 @@ class AudioCaptureEventHandler(ABC):
         """
         pass
 
+    @abstractmethod
+    def on_keyword_detected(self, result):
+        """
+        Called when a keyword is detected.
+
+        :param result: The recognition result containing details about the detected keyword.
+        """
+        pass
+
 
 class AudioCapture:
     """
@@ -61,7 +71,8 @@ class AudioCapture:
         buffer_duration_sec: float = 1.0,
         cross_fade_duration_ms: int = 20,
         vad_parameters: Optional[dict] = None,
-        enable_wave_capture: bool = False
+        enable_wave_capture: bool = False,
+        keyword_model_file: Optional[str] = None
     ):
         """
         Initializes the AudioCapture instance.
@@ -114,6 +125,18 @@ class AudioCapture:
             logger.error(f"Failed to initialize VoiceActivityDetector: {e}")
             raise
 
+        # Initialize keyword recognizer if model file is provided
+        self.keyword_recognizer = None
+        if keyword_model_file:
+            self.keyword_recognizer = AzureKeywordRecognizer(
+                model_file=keyword_model_file,
+                callback=self._on_keyword_detected,
+                sample_rate=sample_rate,
+                channels=channels
+            )
+            self.keyword_recognizer.start_recognition()
+            logger.info("Keyword recognizer initialized.")
+
         # Initialize PyAudio for input
         self.p = pyaudio.PyAudio()
         try:
@@ -155,7 +178,9 @@ class AudioCapture:
         # Process VAD to detect speech
         try:
             speech_detected, is_speech = self.vad.process_audio_chunk(audio_data)
-            #logger.debug(f"Speech detected: {speech_detected}, is_speech: {is_speech}")
+            # Push audio data to keyword recognizer
+            if self.keyword_recognizer:
+                self.keyword_recognizer.push_audio(audio_data.tobytes())
         except Exception as e:
             logger.error(f"Error processing VAD: {e}")
             speech_detected, is_speech = False, False
@@ -242,6 +267,15 @@ class AudioCapture:
         if pointer == 0:
             return buffer.copy()
         return np.concatenate((buffer[pointer:], buffer[:pointer]))
+
+    def _on_keyword_detected(self, result):
+        """
+        Internal callback when a keyword is detected.
+        """
+        logger.info("Keyword detected")
+        self.keyword_recognizer.stop_recognition()
+        self.event_handler.on_keyword_detected(result)
+        self.keyword_recognizer.start_recognition()
 
     def close(self):
         """

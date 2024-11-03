@@ -42,6 +42,10 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         """
         self._client = client
         self._event_handler = event_handler
+        self._keyword_detected = False
+        self._conversation_active = False
+        self._silence_timeout = 10  # Configurable silence timeout in seconds
+        self._silence_timer = None
 
     def send_audio_data(self, audio_data: bytes):
         """
@@ -49,15 +53,22 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
 
         :param audio_data: Raw audio data in bytes.
         """
-        logger.info("Sending audio data to the client.")
-        self._client.send_audio(audio_data)
+        if self._conversation_active:
+            logger.info("Sending audio data to the client.")
+            self._client.send_audio(audio_data)
 
     def on_speech_start(self):
         """
         Handles actions to perform when speech starts.
 
         """
-        logger.info("Speech has started.")
+        logger.info(f"Speech has started, keyword detected: {self._keyword_detected}, conversation active: {self._conversation_active}")
+
+        if self._keyword_detected:
+            self._conversation_active = True
+            if self._silence_timer:
+                self._silence_timer.cancel()
+
         if self._event_handler.is_audio_playing():
             logger.info(f"User started speaking while audio is playing.")
 
@@ -79,10 +90,45 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         """
         Handles actions to perform when speech ends.
         """
-        logger.info("Speech has ended")
+        logger.info(f"Speech has ended, keyword detected: {self._keyword_detected}, conversation active: {self._conversation_active}")
 
-        logger.info("Requesting the client to generate a response.")
-        self._client.generate_response()
+        if self._conversation_active:
+            logger.info("Requesting the client to generate a response.")
+            self._client.generate_response()
+            self._start_silence_timer()
+
+    def on_keyword_detected(self, result):
+        """
+        Called when a keyword is detected.
+
+        :param result: The recognition result containing details about the detected keyword.
+        """
+        logger.info(f"Keyword detected: {result}")
+        self._client.send_text("Hello")
+        self._keyword_detected = True
+        self._conversation_active = True
+
+    def _start_silence_timer(self):
+        if self._silence_timer:
+            self._silence_timer.cancel()
+        self._silence_timer = threading.Timer(self._silence_timeout, self._reset_keyword_detection)
+        self._silence_timer.start()
+
+    def _reset_keyword_detection(self):
+        # if assistant is speaking, wait for it to finish
+        if self._event_handler.is_audio_playing():
+            logger.info("Audio is playing. Waiting for audio to finish before resetting keyword detection.")
+            self._start_silence_timer()
+            return
+
+        logger.info("Silence timeout reached. Resetting keyword detection.")
+
+        # Clear the input audio buffer on the server
+        logger.info("Clearing input audio buffer.")
+        self._client.clear_input_audio_buffer()
+
+        self._keyword_detected = False
+        self._conversation_active = False
 
 
 class MyRealtimeEventHandler(RealtimeAIEventHandler):
@@ -298,20 +344,21 @@ def main():
         # Initialize AudioCapture with the event handler
         audio_capture = AudioCapture(
             event_handler=audio_capture_event_handler,
-            sample_rate=24000,
+            sample_rate=16000,
             channels=1,
             frames_per_buffer=1024,
             buffer_duration_sec=1.0,
             cross_fade_duration_ms=20,
             vad_parameters={
-                "sample_rate": 24000,
+                "sample_rate": 16000,
                 "chunk_size": 1024,
                 "window_duration": 1.0,
                 "silence_ratio": 1.5,
                 "min_speech_duration": 0.3,
                 "min_silence_duration": 1.0
             },
-            enable_wave_capture=False
+            enable_wave_capture=True,
+            keyword_model_file="kws.table",
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
