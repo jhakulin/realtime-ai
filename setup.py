@@ -15,6 +15,7 @@ setup(
         "numpy",
         "websockets",
         "websocket-client",
+        "azure-cognitiveservices-speech",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
