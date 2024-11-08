@@ -84,58 +84,57 @@ class AudioCapture:
         :param buffer_duration_sec: Duration of the internal audio buffer in seconds.
         :param cross_fade_duration_ms: Duration for cross-fading in milliseconds.
         :param vad_parameters: Parameters for VoiceActivityDetector.
+        :param enable_wave_capture: Flag to enable wave file capture.
+        :param keyword_model_file: Path to the keyword recognition model file.
         """
         self.event_handler = event_handler
         self.sample_rate = sample_rate
         self.channels = channels
         self.frames_per_buffer = frames_per_buffer
-        self.buffer_duration_sec = buffer_duration_sec
-        self.buffer_size = int(self.buffer_duration_sec * self.sample_rate)
-        self.audio_buffer = np.zeros(self.buffer_size, dtype=np.int16)
-        self.buffer_pointer = 0
         self.cross_fade_duration_ms = cross_fade_duration_ms
-        self.cross_fade_samples = int((self.cross_fade_duration_ms / 1000) * self.sample_rate)
-        self.speech_started = False
         self.enable_wave_capture = enable_wave_capture
+
+        self.vad = None
+        self.speech_started = False
 
         if self.enable_wave_capture:
             try:
                 self.wave_file = wave.open("microphone_output.wav", "wb")
-                self.wave_file.setnchannels(channels)
+                self.wave_file.setnchannels(self.channels)
                 self.wave_file.setsampwidth(pyaudio.PyAudio().get_sample_size(FORMAT))
-                self.wave_file.setframerate(sample_rate)
+                self.wave_file.setframerate(self.sample_rate)
+                logger.info("Wave file initialized for capture.")
             except Exception as e:
                 logger.error(f"Error opening wave file: {e}")
+                self.enable_wave_capture = False
 
         # Initialize VAD
-        if vad_parameters is None:
-            vad_parameters = {
-                "sample_rate": self.sample_rate,
-                "chunk_size": self.frames_per_buffer,
-                "window_duration": 1.0,
-                "silence_ratio": 1.5,
-                "min_speech_duration": 0.3,
-                "min_silence_duration": 0.3
-            }
-        try:
-            self.vad = VoiceActivityDetector(**vad_parameters)
-            logger.info("VoiceActivityDetector initialized with parameters: "
-                        f"{vad_parameters}")
-        except Exception as e:
-            logger.error(f"Failed to initialize VoiceActivityDetector: {e}")
-            raise
+        if vad_parameters is not None:
+            try:
+                self.vad = VoiceActivityDetector(**vad_parameters)
+                logger.info(f"VoiceActivityDetector initialized with parameters: {vad_parameters}")
+                self.buffer_duration_sec = buffer_duration_sec
+                self.buffer_size = int(self.buffer_duration_sec * self.sample_rate)
+                self.audio_buffer = np.zeros(self.buffer_size, dtype=np.int16)
+                self.buffer_pointer = 0
+                self.cross_fade_samples = int((self.cross_fade_duration_ms / 1000) * self.sample_rate)
+            except Exception as e:
+                logger.error(f"Failed to initialize VoiceActivityDetector: {e}")
+                self.vad = None
 
-        # Initialize keyword recognizer if model file is provided
         self.keyword_recognizer = None
         if keyword_model_file:
-            self.keyword_recognizer = AzureKeywordRecognizer(
-                model_file=keyword_model_file,
-                callback=self._on_keyword_detected,
-                sample_rate=sample_rate,
-                channels=channels
-            )
-            self.keyword_recognizer.start_recognition()
-            logger.info("Keyword recognizer initialized.")
+            try:
+                self.keyword_recognizer = AzureKeywordRecognizer(
+                    model_file=keyword_model_file,
+                    callback=self._on_keyword_detected,
+                    sample_rate=sample_rate,
+                    channels=channels
+                )
+                self.keyword_recognizer.start_recognition()
+                logger.info("Keyword recognizer initialized.")
+            except Exception as e:
+                logger.error(f"Failed to initialize AzureKeywordRecognizer: {e}")
 
         # Initialize PyAudio for input
         self.p = pyaudio.PyAudio()
@@ -167,65 +166,79 @@ class AudioCapture:
         """
         if status:
             logger.warning(f"Input Stream Status: {status}")
+        
+        try:
+            audio_data = np.frombuffer(indata, dtype=np.int16).copy()
+        except ValueError as e:
+            logger.error(f"Error converting audio data: {e}")
+            return (None, pyaudio.paContinue)
 
-        # Convert bytes to numpy int16 and make sure the array is writable
-        audio_data = np.frombuffer(indata, dtype=np.int16).copy()
+        if self.vad is None:
+            self.event_handler.send_audio_data(indata)
+            if self.enable_wave_capture:
+                try:
+                    self.wave_file.writeframes(indata)
+                except Exception as e:
+                    logger.error(f"Error writing to wave file: {e}")
+            return (None, pyaudio.paContinue)
 
-        # Update internal audio buffer
-        self.buffer_pointer = self._update_buffer(audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size)
-        current_buffer = self._get_buffer_content(self.audio_buffer, self.buffer_pointer, self.buffer_size).copy()
-
-        # Process VAD to detect speech
         try:
             speech_detected, is_speech = self.vad.process_audio_chunk(audio_data)
-            # Push audio data to keyword recognizer
             if self.keyword_recognizer:
-                self.keyword_recognizer.push_audio(audio_data.tobytes())
+                self.keyword_recognizer.push_audio(audio_data)
         except Exception as e:
             logger.error(f"Error processing VAD: {e}")
             speech_detected, is_speech = False, False
 
-        # Synchronously handle audio
         if speech_detected or self.speech_started:
             if is_speech:
                 if not self.speech_started:
                     logger.info("Speech started")
+                    self.buffer_pointer = self._update_buffer(audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size)
+                    current_buffer = self._get_buffer_content(self.audio_buffer, self.buffer_pointer, self.buffer_size).copy()
 
-                    # Determine fade length for crossfading
                     fade_length = min(self.cross_fade_samples, len(current_buffer), len(audio_data))
-                    fade_out = np.linspace(1.0, 0.0, fade_length, dtype=np.float32)
-                    fade_in = np.linspace(0.0, 1.0, fade_length, dtype=np.float32)
-
                     if fade_length > 0:
+                        fade_out = np.linspace(1.0, 0.0, fade_length, dtype=np.float32)
+                        fade_in = np.linspace(0.0, 1.0, fade_length, dtype=np.float32)
+
                         buffer_fade_section = current_buffer[-fade_length:].astype(np.float32)
                         audio_fade_section = audio_data[:fade_length].astype(np.float32)
 
                         faded_buffer_section = buffer_fade_section * fade_out
                         faded_audio_section = audio_fade_section * fade_in
 
-                        # Ensure that the slices are writable
                         current_buffer[-fade_length:] = np.round(faded_buffer_section).astype(np.int16)
                         audio_data[:fade_length] = np.round(faded_audio_section).astype(np.int16)
 
-                    # Combine buffered and current audio
-                    combined_audio = np.concatenate((current_buffer, audio_data))
+                        combined_audio = np.concatenate((current_buffer, audio_data))
+                    else:
+                        combined_audio = audio_data
 
                     logger.info("Sending buffered audio to client via event handler...")
                     self.event_handler.on_speech_start()
                     self.event_handler.send_audio_data(combined_audio.tobytes())
                     if self.enable_wave_capture:
-                        self.wave_file.writeframes(combined_audio.tobytes())
+                        try:
+                            self.wave_file.writeframes(combined_audio.tobytes())
+                        except Exception as e:
+                            logger.error(f"Error writing to wave file: {e}")
                 else:
                     logger.info("Sending audio to client via event handler...")
                     self.event_handler.send_audio_data(audio_data.tobytes())
                     if self.enable_wave_capture:
-                        self.wave_file.writeframes(audio_data.tobytes())
+                        try:
+                            self.wave_file.writeframes(audio_data.tobytes())
+                        except Exception as e:
+                            logger.error(f"Error writing to wave file: {e}")
                 self.speech_started = True
             else:
                 logger.info("Speech ended")
                 self.event_handler.on_speech_end()
-                #self.vad.reset()  # Reset VAD if necessary
                 self.speech_started = False
+
+        if self.vad:
+            self.buffer_pointer = self._update_buffer(audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size)
 
         return (None, pyaudio.paContinue)
 
@@ -241,18 +254,21 @@ class AudioCapture:
         """
         new_length = len(new_audio)
         if new_length >= buffer_size:
-            buffer[:] = new_audio[-buffer_size:]  # Keep only last BUFFER_SIZE samples
+            buffer[:] = new_audio[-buffer_size:]
             pointer = 0
+            logger.debug("Buffer overwritten with new audio data.")
         else:
             end_space = buffer_size - pointer
             if new_length <= end_space:
                 buffer[pointer:pointer + new_length] = new_audio
                 pointer += new_length
+                logger.debug(f"Buffer updated. New pointer position: {pointer}")
             else:
                 buffer[pointer:] = new_audio[:end_space]
                 remaining = new_length - end_space
                 buffer[:remaining] = new_audio[end_space:]
                 pointer = remaining
+                logger.debug(f"Buffer wrapped around. New pointer position: {pointer}")
         return pointer
 
     def _get_buffer_content(self, buffer: np.ndarray, pointer: int, buffer_size: int) -> np.ndarray:
@@ -265,7 +281,9 @@ class AudioCapture:
         :return: Ordered audio data as a NumPy array.
         """
         if pointer == 0:
+            logger.debug("Buffer content retrieved without wrapping.")
             return buffer.copy()
+        logger.debug("Buffer content retrieved with wrapping.")
         return np.concatenate((buffer[pointer:], buffer[:pointer]))
 
     def _on_keyword_detected(self, result):
@@ -273,23 +291,37 @@ class AudioCapture:
         Internal callback when a keyword is detected.
         """
         logger.info("Keyword detected")
-        self.keyword_recognizer.stop_recognition()
-        self.event_handler.on_keyword_detected(result)
-        self.keyword_recognizer.start_recognition()
+        if self.keyword_recognizer:
+            try:
+                self.keyword_recognizer.stop_recognition()
+                self.event_handler.on_keyword_detected(result)
+                self.keyword_recognizer.start_recognition()
+                logger.debug("Keyword recognizer restarted after detection.")
+            except Exception as e:
+                logger.error(f"Error handling keyword detection: {e}")
 
     def close(self):
         """
         Closes the audio capture stream and the wave file, releasing all resources.
         """
         try:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.p.terminate()
-            logger.info("AudioCapture stopped and input stream closed.")
+            if hasattr(self, 'stream'):
+                self.stream.stop_stream()
+                self.stream.close()
+                logger.info("Audio input stream stopped and closed.")
 
-            if self.enable_wave_capture and self.wave_file:
+            if hasattr(self, 'p'):
+                self.p.terminate()
+                logger.info("PyAudio terminated.")
+
+            if self.enable_wave_capture and hasattr(self, 'wave_file'):
                 self.wave_file.close()
                 logger.info("Wave file saved successfully.")
 
+            if self.keyword_recognizer:
+                self.keyword_recognizer.stop_recognition()
+                logger.info("Keyword recognizer stopped.")
+
+            logger.info("AudioCapture resources have been released.")
         except Exception as e:
             logger.error(f"Error closing AudioCapture: {e}")

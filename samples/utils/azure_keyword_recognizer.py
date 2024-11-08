@@ -1,4 +1,42 @@
 import azure.cognitiveservices.speech as speechsdk
+from scipy.signal import resample_poly
+import numpy as np
+
+
+def convert_sample_rate(audio_data: np.ndarray, orig_sr: int = 24000, target_sr: int = 16000) -> np.ndarray:
+    """
+    Converts the sample rate of the given audio data from orig_sr to target_sr using polyphase filtering.
+
+    Parameters:
+    - audio_data: np.ndarray
+        The input audio data as a NumPy array of type int16.
+    - orig_sr: int
+        Original sample rate of the audio data.
+    - target_sr: int
+        Desired sample rate after conversion.
+
+    Returns:
+    - np.ndarray
+        The resampled audio data as a NumPy array of type int16.
+    """
+    from math import gcd
+    divisor = gcd(orig_sr, target_sr)
+    up = target_sr // divisor
+    down = orig_sr // divisor
+
+    # Convert to float for high-precision processing
+    audio_float = audio_data.astype(np.float32)
+
+    # Perform resampling
+    resampled_float = resample_poly(audio_float, up, down)
+
+    # Ensure the resampled data is within int16 range
+    resampled_float = np.clip(resampled_float, -32768, 32767)
+
+    # Convert back to int16
+    resampled_int16 = resampled_float.astype(np.int16)
+
+    return resampled_int16
 
 
 class AzureKeywordRecognizer:
@@ -6,7 +44,7 @@ class AzureKeywordRecognizer:
     A class to recognize specific keywords from PCM audio streams using Azure Cognitive Services.
     """
 
-    def __init__(self, model_file: str, callback, sample_rate: int = 16000, bits_per_sample: int = 16, channels: int = 1):
+    def __init__(self, model_file: str, callback, sample_rate: int = 16000, channels: int = 1):
         """
         Initializes the AzureKeywordRecognizer.
 
@@ -15,8 +53,17 @@ class AzureKeywordRecognizer:
         """
 
         # Create a push stream to which we'll write PCM audio data
-        audio_stream_format = speechsdk.audio.AudioStreamFormat(samples_per_second=sample_rate, bits_per_sample=bits_per_sample, channels=channels)
-        self.audio_stream = speechsdk.audio.PushAudioInputStream(stream_format=audio_stream_format)
+        self.sample_rate = sample_rate
+        self.channels = channels
+
+        # Validate the sample rate is either 16000 or 24000
+        if sample_rate not in [16000, 24000]:
+            raise ValueError("Invalid sample rate. Supported rates are 16000 and 24000.")
+        # Validate the number of channels is 1
+        if channels != 1:
+            raise ValueError("Invalid number of channels. Only mono audio is supported.")
+
+        self.audio_stream = speechsdk.audio.PushAudioInputStream()
         self.audio_config = speechsdk.audio.AudioConfig(stream=self.audio_stream)
 
         # Initialize the speech recognizer
@@ -56,9 +103,13 @@ class AzureKeywordRecognizer:
         """
         Pushes PCM audio data to the recognizer.
 
-        :param pcm_data: Bytes of PCM audio data.
+        :param pcm_data: Numpy array of PCM audio samples.
         """
-        self.audio_stream.write(pcm_data)
+        if self.sample_rate == 24000:
+            converted_audio = convert_sample_rate(pcm_data, orig_sr=24000, target_sr=16000)
+            self.audio_stream.write(converted_audio.tobytes())
+        else:
+            self.audio_stream.write(pcm_data.tobytes())
 
     def _on_recognized(self, event: speechsdk.SpeechRecognitionEventArgs):
         """

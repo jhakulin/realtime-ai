@@ -62,6 +62,29 @@ class RealtimeAIClient:
         logger.info("RealtimeAIClient: Queuing audio data for streaming.")
         await self.audio_stream_manager.write_audio_buffer(audio_data)
 
+    async def send_text(self, text: str):
+        """Sends text input to the service manager.
+        """
+        event = {
+            "event_id": self.service_manager._generate_event_id(),
+            "type": "conversation.item.create",
+            "item": {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": text
+                    }
+                ]
+            }
+        }
+        await self.service_manager.send_event(event)
+        logger.info("RealtimeAIClient: Sent text input to server.")
+        # Using server VAD; requesting the client to generate a response after text input.
+        if self._options.turn_detection:
+            await self.generate_response()
+
     async def generate_response(self):
         """Sends a response.create event to generate a response."""
         logger.info("RealtimeAIClient: Generating response.")
