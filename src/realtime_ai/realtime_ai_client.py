@@ -71,6 +71,9 @@ class RealtimeAIClient:
         }
         self._send_event_to_manager(event)
         logger.info("RealtimeAIClient: Sent text input to server.")
+        # Using server VAD; requesting the client to generate a response after text input.
+        if self._options.turn_detection:
+            self.generate_response()
 
     def generate_response(self):
         """Sends a response.create event to generate a response."""
