@@ -148,7 +148,7 @@ class RealtimeAIClient:
             "event_id": self.service_manager._generate_event_id(),
             "type": "conversation.item.create",
             "item": {
-                "id": str(uuid.uuid4()),  # Generate a unique item ID
+                "id": str(uuid.uuid4()).replace('-', ''),
                 "type": "function_call_output",
                 "call_id": call_id,
                 "output": function_output,

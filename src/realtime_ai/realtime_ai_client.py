@@ -1,6 +1,6 @@
 import threading, logging
 import concurrent.futures
-import queue, time
+import queue, time, uuid
 
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
@@ -134,7 +134,7 @@ class RealtimeAIClient:
             "event_id": self.service_manager._generate_event_id(),
             "type": "conversation.item.create",
             "item": {
-                "id": "1234", # Unique item ID
+                "id": str(uuid.uuid4()).replace('-', ''),
                 "type": "function_call_output",
                 "call_id": call_id,
                 "output": function_output,
