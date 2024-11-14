@@ -78,10 +78,15 @@ audio_capture = AudioCapture(audio_capture_event_handler, ...)
 
 ## Installation
 
-1. **Build and install the wheel**:
-   - Build realtime-ai wheel using following command: `python setup.py sdist bdist_wheel`
-   - Go to generated `dist` folder
-   - Install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
+1. **Install the realtime AI Python library and dependencies**:
+
+   - Run the following command in your terminal to install all the necessary dependencies as specified in the requirements.txt file.
+   ```
+   pip install -r requirements.txt
+   ```
+
+   - Alternatively if you want to build the wheel yourself, use following command: `python setup.py sdist bdist_wheel`
+   - After that go to generated `dist` folder and install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
 
 2. **Setup**:
    - Replace placeholders like `"OPENAI_API_KEY"` in the sample script with real information.
