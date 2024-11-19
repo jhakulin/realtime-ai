@@ -109,7 +109,7 @@ class RealtimeAIServiceManager:
             json_object = json.loads(message)
             event = self.parse_realtime_event(json_object)
             if event:
-                self.event_queue.put(event)
+                self.event_queue.put_nowait(event)
                 logger.debug(f"RealtimeAIServiceManager: Event queued: {event.type}")
         except json.JSONDecodeError as e:
             logger.error(f"RealtimeAIServiceManager: JSON parse error: {e}")
