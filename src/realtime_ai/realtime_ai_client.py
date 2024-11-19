@@ -23,11 +23,11 @@ class RealtimeAIClient:
         self.event_handler = event_handler
         self.is_running = False
         self._lock = threading.Lock()
-        self.event_queue = queue.Queue()
         
         # Initialize the consume thread and executor as None
         self._consume_thread = None
         self.executor = None
+        self._stop_event = threading.Event()
 
     def start(self):
         """Starts the RealtimeAIClient."""
@@ -47,13 +47,13 @@ class RealtimeAIClient:
 
                 # Initialize and start the consume thread
                 self._consume_thread = threading.Thread(target=self._consume_events, daemon=True, name="RealtimeAIClient_ConsumeThread")
-                self._consume_thread.start()  # Start event consumption thread
+                self._consume_thread.start()
                 logger.info("RealtimeAIClient: Event consumption thread started.")
             except Exception as e:
                 self.is_running = False
                 logger.error(f"RealtimeAIClient: Error during client start: {e}")
 
-    def stop(self):
+    def stop(self, timeout: float = 5.0):
         """Stops the RealtimeAIClient gracefully."""
         with self._lock:
             if not self.is_running:
@@ -61,22 +61,28 @@ class RealtimeAIClient:
                 return
 
             self.is_running = False
+
+            # Signal stop event
+            self._stop_event.set()
+
             try:
                 self.audio_stream_manager.stop_stream()
                 self.service_manager.disconnect()
-                
+
                 if self._consume_thread is not None:
-                    self._consume_thread.join(timeout=5)
+                    
+                    # Attempt to join the consume thread within the timeout
+                    self._consume_thread.join(timeout=timeout)
                     if self._consume_thread.is_alive():
                         logger.warning("RealtimeAIClient: Consume thread did not terminate within the timeout.")
                     else:
                         logger.info("RealtimeAIClient: Consume thread terminated.")
-                    self._consume_thread = None  # Reset the thread reference
+                    self._consume_thread = None
 
                 if self.executor is not None:
-                    self.executor.shutdown(wait=True)  # Gracefully shut down the executor
+                    self.executor.shutdown(wait=True)
                     logger.info("RealtimeAIClient: ThreadPoolExecutor shut down.")
-                    self.executor = None  # Reset the executor reference
+                    self.executor = None
 
                 logger.info("RealtimeAIClient: Services stopped.")
             except Exception as e:
@@ -212,16 +218,20 @@ class RealtimeAIClient:
     def _consume_events(self):
         """Consume events from the service manager."""
         logger.info("Consume thread: Started consuming events.")
-        while self.is_running:
+        while not self._stop_event.is_set():
             try:
                 event = self.service_manager.get_next_event()
-                with self._lock:
-                    if event: 
-                        if self.executor is not None:
-                            self.executor.submit(self._handle_event, event)
-                        else:
-                            logger.warning("RealtimeAIClient: Executor is not available or shutting down. Event cannot be handled.")
+                if event is None:
+                    logger.info("Consume thread: Received sentinel, exiting.")
+                    break
+
+                if self.executor is not None:
+                    self.executor.submit(self._handle_event, event)
+                else:
+                    logger.warning("RealtimeAIClient: Executor is not available or shutting down. Event cannot be handled.")
                 time.sleep(0.05)
+            except queue.Empty:
+                continue
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error in consume_events: {e}")
                 break

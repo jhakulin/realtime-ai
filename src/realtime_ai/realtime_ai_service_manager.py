@@ -80,6 +80,7 @@ class RealtimeAIServiceManager:
 
     def disconnect(self):
         try:
+            self.event_queue.put(None)  # Signal the event loop to stop
             self.websocket_manager.disconnect()
             self.is_connected = False
             logger.warning("RealtimeAIServiceManager: WebSocket disconnection started.")
@@ -186,7 +187,7 @@ class RealtimeAIServiceManager:
             logger.info("RealtimeAIServiceManager: Waiting for next event...")
             return self.event_queue.get(timeout=timeout)
         except queue.Empty:
-            return None
+            raise
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
