@@ -37,6 +37,7 @@ class RealtimeAIClient:
                 return
 
             self.is_running = True
+            self._stop_event.clear()
             try:
                 self.service_manager.connect()  # Connect to the service
                 logger.info("RealtimeAIClient: Client started.")
