@@ -347,27 +347,36 @@ async def main():
         audio_capture.start()
 
         # Keep the loop running while the stream is active
-        await asyncio.Event().wait()  # Effectively blocks indefinitely
+        while True:
+            await asyncio.sleep(1)  # Sleep to allow other tasks to run
 
-    except KeyboardInterrupt:
-        logger.info("Recording stopped by user.")
-        audio_capture.stop()
-        audio_player.stop()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Shutdown initiated by user.")
+
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+
     finally:
+        # Ensure resources are cleaned up properly
         if audio_player:
+            audio_player.stop()
             audio_player.close()
+            logger.info("Audio player stopped and closed.")
 
         if audio_capture:
+            audio_capture.stop()
             audio_capture.close()
+            logger.info("Audio capture stopped and closed.")
 
         if client:
             try:
                 logger.info("Stopping client...")
                 await client.stop()
+                logger.info("Client stopped gracefully.")
             except Exception as e:
                 logger.error(f"Error during client shutdown: {e}")
+
+        logger.info("Shutdown complete.")
 
 
 if __name__ == "__main__":
