@@ -343,12 +343,16 @@ async def main():
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
+        audio_player.start()
+        audio_capture.start()
 
         # Keep the loop running while the stream is active
         await asyncio.Event().wait()  # Effectively blocks indefinitely
 
     except KeyboardInterrupt:
         logger.info("Recording stopped by user.")
+        audio_capture.stop()
+        audio_player.stop()
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
     finally:

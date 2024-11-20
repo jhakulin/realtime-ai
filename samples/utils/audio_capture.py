@@ -97,18 +97,10 @@ class AudioCapture:
         self.vad = None
         self.speech_started = False
 
-        if self.enable_wave_capture:
-            try:
-                self.wave_file = wave.open("microphone_output.wav", "wb")
-                self.wave_file.setnchannels(self.channels)
-                self.wave_file.setsampwidth(pyaudio.PyAudio().get_sample_size(FORMAT))
-                self.wave_file.setframerate(self.sample_rate)
-                logger.info("Wave file initialized for capture.")
-            except Exception as e:
-                logger.error(f"Error opening wave file: {e}")
-                self.enable_wave_capture = False
+        self.wave_file = None
+        self.pyaudio_instance = pyaudio.PyAudio()
+        self.stream = None
 
-        # Initialize VAD
         if vad_parameters is not None:
             try:
                 self.vad = VoiceActivityDetector(**vad_parameters)
@@ -128,18 +120,47 @@ class AudioCapture:
                 self.keyword_recognizer = AzureKeywordRecognizer(
                     model_file=keyword_model_file,
                     callback=self._on_keyword_detected,
-                    sample_rate=sample_rate,
-                    channels=channels
+                    sample_rate=self.sample_rate,
+                    channels=self.channels
                 )
-                self.keyword_recognizer.start_recognition()
                 logger.info("Keyword recognizer initialized.")
             except Exception as e:
                 logger.error(f"Failed to initialize AzureKeywordRecognizer: {e}")
 
-        # Initialize PyAudio for input
-        self.p = pyaudio.PyAudio()
+        self.is_running = False
+
+    def start(self):
+        """
+        Starts the audio capture stream and initializes necessary components.
+        """
+        if self.is_running:
+            logger.warning("AudioCapture is already running.")
+            return
+
+        if self.enable_wave_capture:
+            try:
+                self.wave_file = wave.open("microphone_output.wav", "wb")
+                self.wave_file.setnchannels(self.channels)
+                self.wave_file.setsampwidth(self.pyaudio_instance.get_sample_size(FORMAT))
+                self.wave_file.setframerate(self.sample_rate)
+                logger.info("Wave file initialized for capture.")
+            except Exception as e:
+                logger.error(f"Error opening wave file: {e}")
+                self.enable_wave_capture = False
+
+        if self.keyword_recognizer:
+            try:
+                self.keyword_recognizer.start_recognition()
+                logger.info("Keyword recognizer started.")
+            except Exception as e:
+                logger.error(f"Failed to start AzureKeywordRecognizer: {e}")
+
+        # ensure the pyaudio instance is initialized
+        if not self.pyaudio_instance:
+            self.pyaudio_instance = pyaudio.PyAudio()
+
         try:
-            self.stream = self.p.open(
+            self.stream = self.pyaudio_instance.open(
                 format=FORMAT,
                 channels=self.channels,
                 rate=self.sample_rate,
@@ -148,10 +169,52 @@ class AudioCapture:
                 stream_callback=self.handle_input_audio
             )
             self.stream.start_stream()
-            logger.info("AudioCapture initialized and input stream started.")
+            self.is_running = True
+            logger.info("Audio stream started.")
         except Exception as e:
             logger.error(f"Failed to initialize PyAudio Input Stream: {e}")
+            self.is_running = False
             raise
+
+    def stop(self, terminate: bool = False):
+        """
+        Stops the audio capture stream and releases all resources.
+        """
+        if not self.is_running:
+            logger.warning("AudioCapture is already stopped.")
+            return
+
+        try:
+            if self.stream is not None:
+                self.stream.stop_stream()
+                self.stream.close()
+                logger.info("Audio stream stopped and closed.")
+        except Exception as e:
+            logger.error(f"Error stopping audio stream: {e}")
+
+        if self.keyword_recognizer:
+            try:
+                self.keyword_recognizer.stop_recognition()
+                logger.info("Keyword recognizer stopped.")
+            except Exception as e:
+                logger.error(f"Error stopping AzureKeywordRecognizer: {e}")
+
+        if self.enable_wave_capture and self.wave_file:
+            try:
+                self.wave_file.close()
+                logger.info("Wave file saved successfully.")
+            except Exception as e:
+                logger.error(f"Error closing wave file: {e}")
+
+        try:
+            if self.pyaudio_instance is not None and terminate:
+                self.pyaudio_instance.terminate()
+                logger.info("PyAudio terminated.")
+        except Exception as e:
+            logger.error(f"Error terminating PyAudio: {e}")
+
+        self.is_running = False
+        logger.info("AudioCapture has been stopped.")
 
     def handle_input_audio(self, indata: bytes, frame_count: int, time_info, status):
         """
@@ -166,7 +229,7 @@ class AudioCapture:
         """
         if status:
             logger.warning(f"Input Stream Status: {status}")
-        
+
         try:
             audio_data = np.frombuffer(indata, dtype=np.int16).copy()
         except ValueError as e:
@@ -175,7 +238,7 @@ class AudioCapture:
 
         if self.vad is None:
             self.event_handler.send_audio_data(indata)
-            if self.enable_wave_capture:
+            if self.enable_wave_capture and self.wave_file:
                 try:
                     self.wave_file.writeframes(indata)
                 except Exception as e:
@@ -194,10 +257,16 @@ class AudioCapture:
             if is_speech:
                 if not self.speech_started:
                     logger.info("Speech started")
-                    self.buffer_pointer = self._update_buffer(audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size)
-                    current_buffer = self._get_buffer_content(self.audio_buffer, self.buffer_pointer, self.buffer_size).copy()
+                    self.buffer_pointer = self._update_buffer(
+                        audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size
+                    )
+                    current_buffer = self._get_buffer_content(
+                        self.audio_buffer, self.buffer_pointer, self.buffer_size
+                    ).copy()
 
-                    fade_length = min(self.cross_fade_samples, len(current_buffer), len(audio_data))
+                    fade_length = min(
+                        self.cross_fade_samples, len(current_buffer), len(audio_data)
+                    )
                     if fade_length > 0:
                         fade_out = np.linspace(1.0, 0.0, fade_length, dtype=np.float32)
                         fade_in = np.linspace(0.0, 1.0, fade_length, dtype=np.float32)
@@ -218,15 +287,14 @@ class AudioCapture:
                     logger.info("Sending buffered audio to client via event handler...")
                     self.event_handler.on_speech_start()
                     self.event_handler.send_audio_data(combined_audio.tobytes())
-                    if self.enable_wave_capture:
+                    if self.enable_wave_capture and self.wave_file:
                         try:
                             self.wave_file.writeframes(combined_audio.tobytes())
                         except Exception as e:
                             logger.error(f"Error writing to wave file: {e}")
                 else:
-                    logger.info("Sending audio to client via event handler...")
                     self.event_handler.send_audio_data(audio_data.tobytes())
-                    if self.enable_wave_capture:
+                    if self.enable_wave_capture and self.wave_file:
                         try:
                             self.wave_file.writeframes(audio_data.tobytes())
                         except Exception as e:
@@ -238,7 +306,9 @@ class AudioCapture:
                 self.speech_started = False
 
         if self.vad:
-            self.buffer_pointer = self._update_buffer(audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size)
+            self.buffer_pointer = self._update_buffer(
+                audio_data, self.audio_buffer, self.buffer_pointer, self.buffer_size
+            )
 
         return (None, pyaudio.paContinue)
 
@@ -304,24 +374,9 @@ class AudioCapture:
         """
         Closes the audio capture stream and the wave file, releasing all resources.
         """
-        try:
-            if hasattr(self, 'stream'):
-                self.stream.stop_stream()
-                self.stream.close()
-                logger.info("Audio input stream stopped and closed.")
+        self.stop(terminate=True)
+        logger.info("AudioCapture resources have been released.")
 
-            if hasattr(self, 'p'):
-                self.p.terminate()
-                logger.info("PyAudio terminated.")
+    def __del__(self):
+        self.close()
 
-            if self.enable_wave_capture and hasattr(self, 'wave_file'):
-                self.wave_file.close()
-                logger.info("Wave file saved successfully.")
-
-            if self.keyword_recognizer:
-                self.keyword_recognizer.stop_recognition()
-                logger.info("Keyword recognizer stopped.")
-
-            logger.info("AudioCapture resources have been released.")
-        except Exception as e:
-            logger.error(f"Error closing AudioCapture: {e}")

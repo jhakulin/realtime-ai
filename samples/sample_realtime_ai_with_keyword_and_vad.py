@@ -3,6 +3,8 @@ import base64
 import os, json
 from typing import Any, Dict
 import threading
+import time
+from enum import Enum, auto
 
 from utils.audio_playback import AudioPlayer
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
@@ -31,6 +33,12 @@ logging.getLogger("realtime_ai").setLevel(logging.ERROR)
 logger = logging.getLogger()
 
 
+class ConversationState(Enum):
+    IDLE = auto()
+    KEYWORD_DETECTED = auto()
+    CONVERSATION_ACTIVE = auto()
+
+
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
     def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler"):
         """
@@ -41,8 +49,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         """
         self._client = client
         self._event_handler = event_handler
-        self._keyword_detected = False
-        self._conversation_active = False
+        self._state = ConversationState.IDLE
         self._silence_timeout = 10  # Silence timeout in seconds for rearming keyword detection
         self._silence_timer = None
 
@@ -52,26 +59,24 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
 
         :param audio_data: Raw audio data in bytes.
         """
-        if self._conversation_active:
+        if self._state == ConversationState.CONVERSATION_ACTIVE:
             logger.info("Sending audio data to the client.")
             self._client.send_audio(audio_data)
 
     def on_speech_start(self):
         """
         Handles actions to perform when speech starts.
-
         """
         logger.info("Local VAD: User speech started")
-        logger.info(f"on_speech_start: Keyword detected: {self._keyword_detected}, Conversation active: {self._conversation_active}")
+        logger.info(f"on_speech_start: Current state: {self._state}")
 
-        if self._keyword_detected:
-            self._conversation_active = True
-            if self._silence_timer:
-                self._silence_timer.cancel()
+        if self._state == ConversationState.KEYWORD_DETECTED:
+            self._set_state(ConversationState.CONVERSATION_ACTIVE)
+            self._cancel_silence_timer()
 
         if (self._client.options.turn_detection is None and
             self._event_handler.is_audio_playing() and
-            self._conversation_active):
+            self._state == ConversationState.CONVERSATION_ACTIVE):
             logger.info("User started speaking while assistant is responding; interrupting the assistant's response.")
             self._client.clear_input_audio_buffer()
             self._client.cancel_response()
@@ -82,9 +87,9 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         Handles actions to perform when speech ends.
         """
         logger.info("Local VAD: User speech ended")
-        logger.info(f"on_speech_end: Keyword detected: {self._keyword_detected}, Conversation active: {self._conversation_active}")
+        logger.info(f"on_speech_end: Current state: {self._state}")
 
-        if self._conversation_active and self._client.options.turn_detection is None:
+        if self._state == ConversationState.CONVERSATION_ACTIVE and self._client.options.turn_detection is None:
             logger.debug("Using local VAD; requesting the client to generate a response after speech ends.")
             self._client.generate_response()
             logger.debug("Conversation is active. Starting silence timer.")
@@ -98,16 +103,20 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         """
         logger.info(f"Local Keyword: User keyword detected: {result}")
         self._client.send_text("Hello")
-        self._keyword_detected = True
-        self._conversation_active = True
+        self._set_state(ConversationState.KEYWORD_DETECTED)
+        self._start_silence_timer()
 
     def _start_silence_timer(self):
-        if self._silence_timer:
-            self._silence_timer.cancel()
-        self._silence_timer = threading.Timer(self._silence_timeout, self._reset_keyword_detection)
+        self._cancel_silence_timer()
+        self._silence_timer = threading.Timer(self._silence_timeout, self._reset_state_due_to_silence)
         self._silence_timer.start()
 
-    def _reset_keyword_detection(self):
+    def _cancel_silence_timer(self):
+        if self._silence_timer:
+            self._silence_timer.cancel()
+            self._silence_timer = None
+
+    def _reset_state_due_to_silence(self):
         if self._event_handler.is_audio_playing() or self._event_handler.is_function_processing():
             logger.info("Assistant is responding or processing a function. Waiting to reset keyword detection.")
             self._start_silence_timer()
@@ -116,9 +125,13 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         logger.info("Silence timeout reached. Rearming keyword detection.")
         logger.debug("Clearing input audio buffer.")
         self._client.clear_input_audio_buffer()
+        self._set_state(ConversationState.IDLE)
 
-        self._keyword_detected = False
-        self._conversation_active = False
+    def _set_state(self, new_state: ConversationState):
+        logger.debug(f"Transitioning from {self._state} to {new_state}")
+        self._state = new_state
+        if new_state != ConversationState.CONVERSATION_ACTIVE:
+            self._cancel_silence_timer()
 
 
 class MyRealtimeEventHandler(RealtimeAIEventHandler):
@@ -340,7 +353,7 @@ def main():
         client = RealtimeAIClient(options, stream_options, event_handler)
         event_handler.set_client(client)
         client.start()
-        
+
         audio_capture_event_handler = MyAudioCaptureEventHandler(
             client=client,
             event_handler=event_handler
@@ -367,6 +380,8 @@ def main():
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
+        audio_player.start()
+        audio_capture.start()
 
         # Loop to ensure keyboard interrupt is caught correctly
         stop_event = threading.Event()
@@ -375,6 +390,9 @@ def main():
                 stop_event.wait(timeout=0.1)
             except KeyboardInterrupt:
                 logger.info("Recording stopped by user.")
+                audio_capture.stop()
+                audio_player.stop()
+
                 if audio_player:
                     audio_player.close()
                 if audio_capture:

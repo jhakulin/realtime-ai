@@ -296,7 +296,7 @@ def main():
         client = RealtimeAIClient(options, stream_options, event_handler)
         event_handler.set_client(client)
         client.start()
-        
+
         audio_capture_event_handler = MyAudioCaptureEventHandler(
             client=client,
             event_handler=event_handler
@@ -322,6 +322,8 @@ def main():
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
+        audio_player.start()
+        audio_capture.start()
 
         # Loop to ensure keyboard interrupt is caught correctly
         stop_event = threading.Event()
@@ -330,6 +332,9 @@ def main():
                 stop_event.wait(timeout=0.1)
             except KeyboardInterrupt:
                 logger.info("Recording stopped by user.")
+                audio_capture.stop()
+                audio_player.stop()
+
                 if audio_player:
                     audio_player.close()
                 if audio_capture:

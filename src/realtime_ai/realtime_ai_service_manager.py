@@ -80,6 +80,7 @@ class RealtimeAIServiceManager:
 
     def disconnect(self):
         try:
+            self.event_queue.put(None)  # Signal the event loop to stop
             self.websocket_manager.disconnect()
             self.is_connected = False
             logger.warning("RealtimeAIServiceManager: WebSocket disconnection started.")
@@ -109,7 +110,7 @@ class RealtimeAIServiceManager:
             json_object = json.loads(message)
             event = self.parse_realtime_event(json_object)
             if event:
-                self.event_queue.put(event)
+                self.event_queue.put_nowait(event)
                 logger.debug(f"RealtimeAIServiceManager: Event queued: {event.type}")
         except json.JSONDecodeError as e:
             logger.error(f"RealtimeAIServiceManager: JSON parse error: {e}")
@@ -186,11 +187,7 @@ class RealtimeAIServiceManager:
             logger.info("RealtimeAIServiceManager: Waiting for next event...")
             return self.event_queue.get(timeout=timeout)
         except queue.Empty:
-            return None
+            raise
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
-
-    def enqueue_event(self, event: dict):
-        self.event_queue.put_nowait(event)
-        logger.debug(f"RealtimeAIServiceManager: Event enqueued: {event.get('type')}")
