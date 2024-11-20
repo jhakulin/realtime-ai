@@ -84,16 +84,40 @@ class RealtimeAIClient:
 
         # Generate a response if required
         if generate_response:
-            await self.generate_response()
+            await self.generate_response(commit_audio_buffer=False)
 
-    async def generate_response(self):
+    async def update_session(self, options: RealtimeAIOptions):
+        """Updates the session configuration with the provided options."""
+        event = {
+            "event_id": self.service_manager._generate_event_id(),
+            "type": "session.update",
+            "session": {
+                "modalities": options.modalities,
+                "instructions": options.instructions,
+                "voice": options.voice,
+                "input_audio_format": options.input_audio_format,
+                "output_audio_format": options.output_audio_format,
+                "input_audio_transcription": {
+                    "model": options.input_audio_transcription_model
+                },
+                "turn_detection": options.turn_detection,
+                "tools": options.tools,
+                "tool_choice": options.tool_choice,
+                "temperature": options.temperature
+            }
+        }
+        await self.service_manager.send_event(event)
+        logger.info("RealtimeAIClient: Sent session update to server.")
+
+    async def generate_response(self, commit_audio_buffer: bool = True):
         """Sends a response.create event to generate a response."""
         logger.info("RealtimeAIClient: Generating response.")
-        commit_event = {
-            "event_id": self.service_manager._generate_event_id(),
-            "type": "input_audio_buffer.commit"
-        }
-        await self.service_manager.send_event(commit_event)
+        if commit_audio_buffer:
+            commit_event = {
+                "event_id": self.service_manager._generate_event_id(),
+                "type": "input_audio_buffer.commit"
+            }
+            await self.service_manager.send_event(commit_event)
 
         response_create_event = {
             "event_id": self.service_manager._generate_event_id(),

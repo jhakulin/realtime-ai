@@ -103,7 +103,7 @@ class RealtimeAIClient:
                 "role": role,
                 "content": [
                     {
-                        "type": "input_text",
+                        "type": "text" if role == "assistant" else "input_text",
                         "text": text
                     }
                 ]

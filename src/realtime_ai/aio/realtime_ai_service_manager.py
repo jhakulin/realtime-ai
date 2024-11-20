@@ -76,6 +76,7 @@ class RealtimeAIServiceManager:
 
     async def disconnect(self):
         try:
+            await self.event_queue.put(None)  # Signal the event loop to stop
             await self.websocket_manager.disconnect()
         except asyncio.CancelledError:
             logger.info("RealtimeAIServiceManager: Disconnect was cancelled.")
@@ -107,7 +108,7 @@ class RealtimeAIServiceManager:
             json_object = json.loads(message)
             event = self.parse_realtime_event(json_object)
             if event:
-                await self.event_queue.put_nowait(event)
+                await self.event_queue.put(event)
                 logger.debug(f"RealtimeAIServiceManager: Event queued: {event.type}")
         except json.JSONDecodeError as e:
             logger.error(f"RealtimeAIServiceManager: JSON parse error: {e}")
@@ -190,7 +191,3 @@ class RealtimeAIServiceManager:
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
-
-    def enqueue_event(self, event: dict):
-        self.event_queue.put_nowait(event)
-        logger.debug(f"RealtimeAIServiceManager: Event enqueued: {event.get('type')}")

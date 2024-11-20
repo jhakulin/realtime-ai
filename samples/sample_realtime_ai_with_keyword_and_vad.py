@@ -200,7 +200,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         logger.info(f"User transcription complete: {event.transcript}")
 
     def on_response_audio_done(self, event: ResponseAudioDone):
-        logger.info(f"Audio done for response ID {event.response_id}, item ID {event.item_id}")
+        logger.debug(f"Audio done for response ID {event.response_id}, item ID {event.item_id}")
 
     def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone):
         logger.debug(f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}")

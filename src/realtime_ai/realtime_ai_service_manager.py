@@ -191,7 +191,3 @@ class RealtimeAIServiceManager:
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
-
-    def enqueue_event(self, event: dict):
-        self.event_queue.put_nowait(event)
-        logger.debug(f"RealtimeAIServiceManager: Event enqueued: {event.get('type')}")
