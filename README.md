@@ -74,6 +74,9 @@ audio_capture_event_handler = MyAudioCaptureEventHandler(
    event_handler=event_handler
 )
 audio_capture = AudioCapture(audio_capture_event_handler, ...)
+
+audio_player.start()
+audio_capture.start()
 ```
 
 ## Installation
