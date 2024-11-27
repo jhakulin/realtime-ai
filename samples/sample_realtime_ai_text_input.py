@@ -290,7 +290,7 @@ def main():
         stop_event = threading.Event()
 
         print_instructions()
-        
+
         while not stop_event.is_set():
             try:
                 user_input = input("User: ")
@@ -302,23 +302,18 @@ def main():
                     stop_event.set()
                     break
 
-                # Check for modality switch command
-                if user_input == TEXT_MODALITY_COMMAND or user_input == AUDIO_AND_TEXT_MODALITY_COMMAND:
-                    # Update the modality based on the user input
-                    new_modality = "text" if user_input == TEXT_MODALITY_COMMAND else "audio_text"
-                    options.modalities = ["text"] if new_modality == "text" else ["audio", "text"]
-                    client.update_session(options=options)
-
-                    # Inform the user of the modality update
-                    print(f"Modality has been updated to {new_modality}.")
-                    continue  # Skip the rest and prompt for next input
+                # Check for command input
+                if handle_commands(client, user_input, options):
+                    continue
 
                 print("Assistant: ", end='', flush=True)
                 # Send user input to assistant
                 client.send_text(user_input)
 
                 # Wait for response to be processed
-                response_event.wait()
+                if client.is_running:
+                    response_event.wait()
+
                 response_event.clear()
                 print("\n")
 
@@ -340,11 +335,41 @@ def main():
             audio_player.close()
 
 
+def handle_commands(client: RealtimeAIClient, user_input: str, options: RealtimeAIOptions) -> bool:
+        
+    if user_input == TEXT_MODALITY_COMMAND or user_input == AUDIO_AND_TEXT_MODALITY_COMMAND:
+        new_modality = "text" if user_input == TEXT_MODALITY_COMMAND else "audio_text"
+        options.modalities = ["text"] if new_modality == "text" else ["audio", "text"]
+        client.update_session(options=options)
+        print(f"Modality has been updated to {new_modality}.")
+        return True
+
+    if user_input == "/start":
+        if client.is_running:
+            print("Client is already running.")
+            return True
+
+        client.start()
+        return True
+
+    if user_input == "/stop":
+        if not client.is_running:
+            print("Client is already stopped.")
+            return True
+
+        client.stop()
+        return True
+
+    return False
+
+
 def print_instructions():
     print("You can use the following commands to interact with the assistant:")
     print(" - Type your message and press Enter to send it to the assistant.")
     print(" - Type '/text' to switch to text modality.")
     print(" - Type '/audio_text' to switch to audio_text modality. In this sample, only audio output is supported.")
+    print(" - Type '/start' to the client.")
+    print(" - Type '/stop' to stop the client.")
     print(" - Type 'exit' to close the assistant.")
     print()
 
