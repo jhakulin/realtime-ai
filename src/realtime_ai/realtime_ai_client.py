@@ -138,6 +138,7 @@ class RealtimeAIClient:
             }
         }
         self._send_event_to_manager(event)
+        self._options = options
         logger.info("RealtimeAIClient: Sent session update to server.")
 
     def generate_response(self, commit_audio_buffer: bool = True):
@@ -152,7 +153,7 @@ class RealtimeAIClient:
         self._send_event_to_manager({
             "event_id": self.service_manager._generate_event_id(),
             "type": "response.create",
-            "response": {"modalities": ["text", "audio"]}
+            "response": {"modalities": self.options.modalities}
         })
 
     def cancel_response(self):
@@ -213,7 +214,7 @@ class RealtimeAIClient:
         self._send_event_to_manager({
             "event_id": self.service_manager._generate_event_id(),
             "type": "response.create",
-            "response": {"modalities": ["text", "audio"]}
+            "response": {"modalities": self.options.modalities}
         })
 
     def _consume_events(self):
