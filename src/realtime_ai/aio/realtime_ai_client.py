@@ -54,6 +54,8 @@ class RealtimeAIClient:
                         await self._consume_task
                     except asyncio.CancelledError:
                         logger.info("RealtimeAIClient: consume_events task cancelled.")
+
+                await self.service_manager.clear_event_queue()
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error during client stop: {e}")
 
