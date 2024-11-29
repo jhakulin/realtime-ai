@@ -85,6 +85,7 @@ class RealtimeAIClient:
                     logger.info("RealtimeAIClient: ThreadPoolExecutor shut down.")
                     self.executor = None
 
+                self.service_manager.clear_event_queue()
                 logger.info("RealtimeAIClient: Services stopped.")
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error during client stop: {e}")
