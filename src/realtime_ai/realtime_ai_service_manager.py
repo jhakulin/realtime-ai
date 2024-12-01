@@ -31,7 +31,9 @@ from realtime_ai.models.realtime_ai_events import (
     InputAudioBufferSpeechStarted,
     ResponseOutputItemAdded,
     ResponseFunctionCallArgumentsDelta,
-    ResponseFunctionCallArgumentsDone
+    ResponseFunctionCallArgumentsDone,
+    InputAudioBufferCleared,
+    ReconnectedEvent
 )
 
 logger = logging.getLogger(__name__)
@@ -94,9 +96,17 @@ class RealtimeAIServiceManager:
         except Exception as e:
             logger.error(f"RealtimeAIServiceManager: Failed to send event {event.get('type')}: {e}")
 
-    def on_connected(self):
+    def on_connected(self, reconnection: bool = False):
         logger.info("RealtimeAIServiceManager: WebSocket connected.")
         self.send_event(self.session_update_event)
+        if reconnection:
+            # If it's a reconnection, trigger a ReconnectedEvent
+            reconnect_event = ReconnectedEvent(
+                event_id=self._generate_event_id(), 
+                type="reconnect",
+            )
+            self.on_message_received(json.dumps(reconnect_event.__dict__))  # Sending ReconnectedEvent as JSON string
+            logger.debug("RealtimeAIServiceManager: ReconnectedEvent sent.")
         logger.debug("RealtimeAIServiceManager: session.update event sent.")
 
     def on_disconnected(self, status_code: int, reason: str):
@@ -179,6 +189,8 @@ class RealtimeAIServiceManager:
             "response.output_item.added": ResponseOutputItemAdded,
             "response.function_call_arguments.delta": ResponseFunctionCallArgumentsDelta,
             "response.function_call_arguments.done": ResponseFunctionCallArgumentsDone,
+            "input_audio_buffer.cleared": InputAudioBufferCleared,
+            "reconnected": ReconnectedEvent
         }
         return event_mapping.get(event_type)
 

@@ -22,15 +22,21 @@ class WebSocketManager:
             "OpenAI-Beta": "realtime=v1",
         }
 
-    async def connect(self):
+        self.reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
+
+    async def connect(self, reconnection=False):
         """
         Establishes a WebSocket connection.
         """
         try:
+            if self.websocket and self.websocket.open:
+                logger.info("WebSocketManager: Already connected.")
+                return
+
             logger.info(f"WebSocketManager: Connecting to {self.url}")
             self.websocket = await websockets.connect(self.url, extra_headers=self.headers)
             logger.info("WebSocketManager: WebSocket connection established.")
-            await self.service_manager.on_connected()
+            await self.service_manager.on_connected(reconnection=reconnection)
 
             asyncio.create_task(self._receive_messages())  # Begin listening as a separate task
         except Exception as e:
@@ -43,6 +49,11 @@ class WebSocketManager:
         try:
             async for message in self.websocket:
                 await self.service_manager.on_message_received(message)
+                logger.debug(f"WebSocketManager: Received message: {message}")
+                if "session_expired" in message and "maximum duration of 15 minutes" in message:
+                    logger.info("WebSocketManager: Reconnecting due to maximum duration reached.")
+                    await asyncio.sleep(self.reconnect_delay)
+                    await self.connect(reconnection=True)
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"WebSocketManager: Connection closed during receive: {e.code} - {e.reason}")
             await self.service_manager.on_disconnected(e.code, e.reason)

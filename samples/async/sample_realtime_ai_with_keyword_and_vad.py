@@ -1,18 +1,22 @@
+import asyncio
 import logging
 import base64
-import os, json
+import os, sys, json
 from typing import Any, Dict
-import threading
-import time
 from enum import Enum, auto
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 from utils.audio_playback import AudioPlayer
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
 from utils.function_tool import FunctionTool
-from realtime_ai.realtime_ai_client import RealtimeAIClient
+from realtime_ai.aio.realtime_ai_client import RealtimeAIClient
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
-from realtime_ai.realtime_ai_event_handler import RealtimeAIEventHandler
+from realtime_ai.aio.realtime_ai_event_handler import RealtimeAIEventHandler
 from realtime_ai.models.realtime_ai_events import *
 from user_functions import user_functions
 
@@ -27,7 +31,7 @@ logging.basicConfig(
 logging.getLogger("utils.audio_playback").setLevel(logging.ERROR)
 logging.getLogger("utils.audio_capture").setLevel(logging.ERROR)
 logging.getLogger("utils.vad").setLevel(logging.ERROR)
-logging.getLogger("realtime_ai").setLevel(logging.ERROR)
+logging.getLogger("realtime_ai").setLevel(logging.INFO)
 
 # Root logger for general logging
 logger = logging.getLogger()
@@ -40,18 +44,20 @@ class ConversationState(Enum):
 
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
-    def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler"):
+    def __init__(self, client: RealtimeAIClient, event_handler: "MyRealtimeEventHandler", event_loop):
         """
         Initializes the event handler.
         
         :param client: Instance of RealtimeClient.
-        :param event_handler: Instance of MyRealtimeEventHandler.
+        :param event_handler: Instance of MyRealtimeEventHandler
+        :param event_loop: The asyncio event loop.
         """
         self._client = client
         self._event_handler = event_handler
         self._state = ConversationState.IDLE
         self._silence_timeout = 10  # Silence timeout in seconds for rearming keyword detection
-        self._silence_timer = None
+        self._silence_timer_task = None
+        self._event_loop = event_loop
 
     def send_audio_data(self, audio_data: bytes):
         """
@@ -61,7 +67,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         """
         if self._state == ConversationState.CONVERSATION_ACTIVE:
             logger.info("Sending audio data to the client.")
-            self._client.send_audio(audio_data)
+            asyncio.run_coroutine_threadsafe(self._client.send_audio(audio_data), self._event_loop)
 
     def on_speech_start(self):
         """
@@ -71,15 +77,15 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         logger.info(f"on_speech_start: Current state: {self._state}")
 
         if self._state == ConversationState.KEYWORD_DETECTED:
-            self._set_state(ConversationState.CONVERSATION_ACTIVE)
-            self._cancel_silence_timer()
+            asyncio.run_coroutine_threadsafe(self._set_state(ConversationState.CONVERSATION_ACTIVE), self._event_loop)
+            asyncio.run_coroutine_threadsafe(self._cancel_silence_timer(), self._event_loop)
 
         if (self._client.options.turn_detection is None and
             self._event_handler.is_audio_playing() and
             self._state == ConversationState.CONVERSATION_ACTIVE):
             logger.info("User started speaking while assistant is responding; interrupting the assistant's response.")
-            self._client.clear_input_audio_buffer()
-            self._client.cancel_response()
+            asyncio.run_coroutine_threadsafe(self._client.clear_input_audio_buffer(), self._event_loop)
+            asyncio.run_coroutine_threadsafe(self._client.cancel_response(), self._event_loop)
             self._event_handler.audio_player.drain_and_restart()
 
     def on_speech_end(self):
@@ -91,9 +97,9 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
 
         if self._state == ConversationState.CONVERSATION_ACTIVE and self._client.options.turn_detection is None:
             logger.debug("Using local VAD; requesting the client to generate a response after speech ends.")
-            self._client.generate_response()
+            asyncio.run_coroutine_threadsafe(self._client.generate_response(), self._event_loop)
             logger.debug("Conversation is active. Starting silence timer.")
-            self._start_silence_timer()
+            asyncio.run_coroutine_threadsafe(self._start_silence_timer(), self._event_loop)
 
     def on_keyword_detected(self, result):
         """
@@ -102,48 +108,55 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         :param result: The recognition result containing details about the detected keyword.
         """
         logger.info(f"Local Keyword: User keyword detected: {result}")
-        self._client.send_text("Hello")
-        self._set_state(ConversationState.KEYWORD_DETECTED)
-        self._start_silence_timer()
+        asyncio.run_coroutine_threadsafe(self._client.send_text("Hello"), self._event_loop)
+        asyncio.run_coroutine_threadsafe(self._set_state(ConversationState.KEYWORD_DETECTED), self._event_loop)
+        asyncio.run_coroutine_threadsafe(self._start_silence_timer(), self._event_loop)
 
-    def _start_silence_timer(self):
-        self._cancel_silence_timer()
-        self._silence_timer = threading.Timer(self._silence_timeout, self._reset_state_due_to_silence)
-        self._silence_timer.start()
+    async def _silence_timer_coroutine(self):
+        await asyncio.sleep(self._silence_timeout)
+        await self._reset_state_due_to_silence()
 
-    def _cancel_silence_timer(self):
-        if self._silence_timer:
-            self._silence_timer.cancel()
-            self._silence_timer = None
+    async def _start_silence_timer(self):
+        await self._cancel_silence_timer()
+        self._silence_timer_task = asyncio.create_task(self._silence_timer_coroutine(), name="SilenceTimer")
 
-    def _reset_state_due_to_silence(self):
+    async def _cancel_silence_timer(self):
+        if self._silence_timer_task and not self._silence_timer_task.done():
+            self._silence_timer_task.cancel()
+            try:
+                await self._silence_timer_task
+            except asyncio.CancelledError:
+                logger.debug("Silence timer cancelled.")
+            self._silence_timer_task = None
+
+    async def _reset_state_due_to_silence(self):
         if self._event_handler.is_audio_playing() or self._event_handler.is_function_processing():
             logger.info("Assistant is responding or processing a function. Waiting to reset keyword detection.")
-            self._start_silence_timer()
+            await self._start_silence_timer()
             return
 
         logger.info("Silence timeout reached. Rearming keyword detection.")
         logger.debug("Clearing input audio buffer.")
-        self._client.clear_input_audio_buffer()
-        self._set_state(ConversationState.IDLE)
+        asyncio.run_coroutine_threadsafe(self._client.clear_input_audio_buffer(), self._event_loop)
+        asyncio.run_coroutine_threadsafe(self._set_state(ConversationState.IDLE), self._event_loop)
 
-    def _set_state(self, new_state: ConversationState):
+    async def _set_state(self, new_state: ConversationState):
         logger.debug(f"Transitioning from {self._state} to {new_state}")
         self._state = new_state
         if new_state != ConversationState.CONVERSATION_ACTIVE:
-            self._cancel_silence_timer()
+            await self._cancel_silence_timer()
 
 
 class MyRealtimeEventHandler(RealtimeAIEventHandler):
     def __init__(self, audio_player: AudioPlayer, functions: FunctionTool):
         super().__init__()
         self._audio_player = audio_player
-        self._functions = functions
+        self._lock = asyncio.Lock()
+        self._client = None
         self._current_item_id = None
         self._current_audio_content_index = None
         self._call_id_to_function_name = {}
-        self._lock = threading.Lock()
-        self._client = None
+        self._functions = functions
         self._function_processing = False
 
     @property
@@ -165,58 +178,58 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
     def set_client(self, client: RealtimeAIClient):
         self._client = client
 
-    def on_error(self, event: ErrorEvent):
+    async def on_error(self, event: ErrorEvent) -> None:
         logger.error(f"Error occurred: {event.error.message}")
 
-    def on_input_audio_buffer_speech_stopped(self, event: InputAudioBufferSpeechStopped):
+    async def on_input_audio_buffer_speech_stopped(self, event: InputAudioBufferSpeechStopped) -> None:
         logger.info(f"Server VAD: Speech stopped at {event.audio_end_ms}ms, Item ID: {event.item_id}")
 
-    def on_input_audio_buffer_cleared(self, event: InputAudioBufferCleared):
+    async def on_input_audio_buffer_cleared(self, event: InputAudioBufferCleared):
         logger.info("Input audio buffer cleared.")
 
-    def on_reconnected(self, event: ReconnectedEvent):
+    async def on_reconnected(self, event: ReconnectedEvent) -> None:
         logger.info("Reconnected...")
 
-    def on_input_audio_buffer_committed(self, event: InputAudioBufferCommitted):
+    async def on_input_audio_buffer_committed(self, event: InputAudioBufferCommitted) -> None:
         logger.debug(f"Audio Buffer Committed: {event.item_id}")
 
-    def on_conversation_item_created(self, event: ConversationItemCreated):
+    async def on_conversation_item_created(self, event: ConversationItemCreated) -> None:
         logger.debug(f"New Conversation Item: {event.item}")
 
-    def on_response_created(self, event: ResponseCreated):
+    async def on_response_created(self, event: ResponseCreated) -> None:
         logger.debug(f"Response Created: {event.response}")
 
-    def on_response_content_part_added(self, event: ResponseContentPartAdded):
+    async def on_response_content_part_added(self, event: ResponseContentPartAdded) -> None:
         logger.debug(f"New Part Added: {event.part}")
 
-    def on_response_audio_delta(self, event: ResponseAudioDelta):
+    async def on_response_audio_delta(self, event: ResponseAudioDelta) -> None:
         logger.debug(f"Received audio delta for Response ID {event.response_id}, Item ID {event.item_id}, Content Index {event.content_index}")
         self._current_item_id = event.item_id
         self._current_audio_content_index = event.content_index
         self.handle_audio_delta(event)
 
-    def on_response_audio_transcript_delta(self, event: ResponseAudioTranscriptDelta):
+    async def on_response_audio_transcript_delta(self, event: ResponseAudioTranscriptDelta) -> None:
         logger.info(f"Assistant transcription delta: {event.delta}")
 
-    def on_rate_limits_updated(self, event: RateLimitsUpdated):
+    async def on_rate_limits_updated(self, event: RateLimitsUpdated) -> None:
         for rate in event.rate_limits:
             logger.debug(f"Rate Limit: {rate.name}, Remaining: {rate.remaining}")
 
-    def on_conversation_item_input_audio_transcription_completed(self, event: ConversationItemInputAudioTranscriptionCompleted):
+    async def on_conversation_item_input_audio_transcription_completed(self, event: ConversationItemInputAudioTranscriptionCompleted) -> None:
         logger.info(f"User transcription complete: {event.transcript}")
 
-    def on_response_audio_done(self, event: ResponseAudioDone):
+    async def on_response_audio_done(self, event: ResponseAudioDone) -> None:
         logger.debug(f"Audio done for response ID {event.response_id}, item ID {event.item_id}")
 
-    def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone):
+    async def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone) -> None:
         logger.debug(f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}")
 
-    def on_response_content_part_done(self, event: ResponseContentPartDone):
+    async def on_response_content_part_done(self, event: ResponseContentPartDone) -> None:
         part_type = event.part.get("type")
         part_text = event.part.get("text", "")
         logger.debug(f"Content part done: '{part_text}' of type '{part_type}' for response ID {event.response_id}")
 
-    def on_response_output_item_done(self, event: ResponseOutputItemDone):
+    async def on_response_output_item_done(self, event: ResponseOutputItemDone) -> None:
         item_content = event.item.get("content", [])
         if item_content:
             for item in item_content:
@@ -225,43 +238,53 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
                     if transcript:
                         logger.info(f"Assistant transcription complete: {transcript}")
 
-    def on_response_done(self, event: ResponseDone):
+    async def on_response_done(self, event: ResponseDone) -> None:
         logger.debug(f"Assistant's response completed with status '{event.response.get('status')}' and ID '{event.response.get('id')}'")
 
-    def on_session_created(self, event: SessionCreated):
+    async def on_session_created(self, event: SessionCreated) -> None:
         logger.info(f"Session created: {event.session}")
 
-    def on_session_updated(self, event: SessionUpdated):
+    async def on_session_updated(self, event: SessionUpdated) -> None:
         logger.info(f"Session updated: {event.session}")
 
-    def on_input_audio_buffer_speech_started(self, event: InputAudioBufferSpeechStarted):
+    async def on_input_audio_buffer_speech_started(self, event: InputAudioBufferSpeechStarted) -> None:
         logger.info(f"Server VAD: User speech started at {event.audio_start_ms}ms for item ID {event.item_id}")
         if self._client.options.turn_detection is not None:
-            self._client.clear_input_audio_buffer()
-            self._client.cancel_response()
-            self._audio_player.drain_and_restart()
+            await self._client.clear_input_audio_buffer()
+            await self._client.cancel_response()
+            await asyncio.threads.to_thread(self._audio_player.drain_and_restart)
 
-    def on_response_output_item_added(self, event: ResponseOutputItemAdded):
+    async def on_response_output_item_added(self, event: ResponseOutputItemAdded) -> None:
         logger.debug(f"Output item added for response ID {event.response_id} with item: {event.item}")
         if event.item.get("type") == "function_call":
             call_id = event.item.get("call_id")
             function_name = event.item.get("name")
             if call_id and function_name:
-                with self._lock:
+                # Properly acquire the lock with 'await' and spread the usage over two lines
+                await self._lock.acquire()  # Wait until the lock is available, then acquire it
+                try:
                     self._call_id_to_function_name[call_id] = function_name
-                logger.debug(f"Registered function call. Call ID: {call_id}, Function Name: {function_name}")
+                    logger.debug(f"Registered function call. Call ID: {call_id}, Function Name: {function_name}")
+                finally:
+                    # Ensure the lock is released even if an exception occurs
+                    self._lock.release()
             else:
                 logger.warning("Function call item missing 'call_id' or 'name' fields.")
 
-    def on_response_function_call_arguments_delta(self, event: ResponseFunctionCallArgumentsDelta):
+    async def on_response_function_call_arguments_delta(self, event: ResponseFunctionCallArgumentsDelta) -> None:
         logger.debug(f"Function call arguments delta for call ID {event.call_id}: {event.delta}")
 
-    def on_response_function_call_arguments_done(self, event: ResponseFunctionCallArgumentsDone):
+    async def on_response_function_call_arguments_done(self, event: ResponseFunctionCallArgumentsDone) -> None:
         call_id = event.call_id
         arguments_str = event.arguments
 
-        with self._lock:
+        # Acquire lock using asynchronous method
+        await self._lock.acquire()
+        try:
             function_name = self._call_id_to_function_name.pop(call_id, None)
+        finally:
+            # Make sure the lock is released even if an exception is raised
+            self._lock.release()
 
         if not function_name:
             logger.error(f"No function name found for call ID: {call_id}")
@@ -270,9 +293,9 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         try:
             self._function_processing = True
             logger.info(f"Executing function '{function_name}' with arguments: {arguments_str} for call ID {call_id}")
-            function_output = self._functions.execute(function_name, arguments_str)
+            function_output = await asyncio.threads.to_thread(self._functions.execute, function_name, arguments_str)
             logger.info(f"Function output for call ID {call_id}: {function_output}")
-            self._client.generate_response_from_function_call(call_id, function_output)
+            await self._client.generate_response_from_function_call(call_id, function_output)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse arguments for call ID {call_id}: {e}")
             return
@@ -313,7 +336,7 @@ def get_vad_configuration(use_server_vad=False):
         return None  # Local VAD typically requires no special configuration
 
 
-def main():
+async def main():
     """
     Main function to initialize and run the audio processing and realtime client asynchronously.
     """
@@ -342,7 +365,7 @@ def main():
             temperature=0.8,
             max_output_tokens=None,
             voice="sage",
-            enable_auto_reconnect=True,
+            enable_auto_reconnect=True
         )
 
         # Define AudioStreamOptions
@@ -359,11 +382,14 @@ def main():
         event_handler = MyRealtimeEventHandler(audio_player=audio_player, functions=functions)
         client = RealtimeAIClient(options, stream_options, event_handler)
         event_handler.set_client(client)
-        client.start()
+        await client.start()
 
+        loop = asyncio.get_running_loop()
+        
         audio_capture_event_handler = MyAudioCaptureEventHandler(
             client=client,
-            event_handler=event_handler
+            event_handler=event_handler,
+            event_loop=loop,
         )
 
         # Initialize AudioCapture with the event handler
@@ -383,40 +409,45 @@ def main():
                 "min_silence_duration": 1.0
             },
             enable_wave_capture=False,
-            keyword_model_file="resources/kws.table",
+            keyword_model_file="../resources/kws.table",
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
         audio_player.start()
         audio_capture.start()
 
-        # Loop to ensure keyboard interrupt is caught correctly
-        stop_event = threading.Event()
-        while not stop_event.is_set():
-            try:
-                stop_event.wait(timeout=0.1)
-            except KeyboardInterrupt:
-                logger.info("Recording stopped by user.")
-                audio_capture.stop()
-                audio_player.stop()
+        # Keep the loop running while the stream is active
+        while True:
+            await asyncio.sleep(1)  # Sleep to allow other tasks to run
 
-                if audio_player:
-                    audio_player.close()
-                if audio_capture:
-                    audio_capture.close()
-                stop_event.set()
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("Shutdown initiated by user.")
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
     finally:
+        # Ensure resources are cleaned up properly
+        if audio_player:
+            audio_player.stop()
+            audio_player.close()
+            logger.info("Audio player stopped and closed.")
+
+        if audio_capture:
+            audio_capture.stop()
+            audio_capture.close()
+            logger.info("Audio capture stopped and closed.")
+
         if client:
             try:
                 logger.info("Stopping client...")
-                client.stop()
+                await client.stop()
+                logger.info("Client stopped gracefully.")
             except Exception as e:
                 logger.error(f"Error during client shutdown: {e}")
 
+        logger.info("Shutdown complete.")
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

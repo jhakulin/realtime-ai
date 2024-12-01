@@ -50,7 +50,9 @@ options = RealtimeAIOptions(
    tools=functions.definitions,
    tool_choice="auto",
    temperature=0.8,
-   max_output_tokens=None
+   max_output_tokens=None,
+   voice="sage",
+   enable_auto_reconnect=True,
 )
 
 # Define AudioStreamOptions (currently only 16bit PCM 24kHz mono is supported)
@@ -130,6 +132,20 @@ For example, the Lenovo ThinkPad P16S has been tested and provides a reliable co
    - Click **Apply** to save the changes.
    - Click **OK** to exit the Microphone Properties dialog.
    - Click **OK** in the Sound settings window to close it.
+
+### Audio Configuration on Mac
+
+1. **Install the PyAudio**:
+    
+    If you encounter installation problems in Mac, ensure you have installed portaudio by `brew install portaudio` first.
+
+2. **Install the SSL certificates**:
+   
+   If you encounter SSL certification problems when running the samples, install certificates via `/Applications/Python 3.x/Install Certificates.command`
+
+3. **Audio Echo Cancellation**:
+   
+   If your Mac do not have integrated audio echo cancellation, using e.g. AirPods is recommended to prevent assistant voice leaking into microphone input.
 
 ### Alternative Audio Options
 

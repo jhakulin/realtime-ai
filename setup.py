@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="realtime-ai",
-    version="0.1.3",
+    version="0.1.4",
     description="Python SDK for real-time audio processing with OpenAI's Realtime REST API.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

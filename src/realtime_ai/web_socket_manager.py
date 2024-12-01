@@ -1,6 +1,7 @@
 import json
 import logging
 import threading
+import time
 import websocket  # pip install websocket-client
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 
@@ -23,12 +24,18 @@ class WebSocketManager:
 
         self.ws = None
         self._receive_thread = None
+        self.reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
+        self.is_reconnection = False
 
     def connect(self):
         """
         Establishes a WebSocket connection.
         """
         try:
+            if self.ws and self.ws.sock and self.ws.sock.connected:
+                logger.info("WebSocketManager: Already connected.")
+                return
+    
             logger.info(f"WebSocketManager: Connecting to {self.url}")
             self.ws = websocket.WebSocketApp(
                 self.url,
@@ -69,7 +76,15 @@ class WebSocketManager:
 
     def _on_open(self, ws):
         logger.info("WebSocketManager: WebSocket connection opened.")
-        self.service_manager.on_connected()
+        if self.is_reconnection:
+            logger.info("WebSocketManager: Connection reopened (Reconnection).")
+            self.service_manager.on_connected(reconnection=True)
+            self.is_reconnection = False
+        else:
+            logger.info("WebSocketManager: Connection opened (Initial).")
+            self.service_manager.on_connected()
+
+        self.is_reconnection = False 
 
     def _on_message(self, ws, message):
         logger.debug(f"WebSocketManager: Received message: {message}")
@@ -83,3 +98,14 @@ class WebSocketManager:
         logger.warning(f"WebSocketManager: WebSocket connection closed: {close_status_code} - {close_msg}")
         self.service_manager.on_disconnected(close_status_code, close_msg)
 
+        # If the session ended due to maximum duration, attempt to reconnect
+        if close_status_code == 1001 and "maximum duration of 15 minutes" in close_msg:
+            logger.debug("WebSocketManager: Session ended due to maximum duration. Reconnecting...")
+            if self.options.enable_auto_reconnect:
+                self._schedule_reconnect()
+
+    def _schedule_reconnect(self):
+        logger.info("WebSocketManager: Scheduling reconnection...")
+        time.sleep(self.reconnect_delay)
+        self.is_reconnection = True
+        self.connect()
