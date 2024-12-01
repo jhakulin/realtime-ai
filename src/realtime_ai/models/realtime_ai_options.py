@@ -24,6 +24,7 @@ class RealtimeAIOptions:
     tool_choice: str = "auto"
     temperature: float = 0.8
     max_output_tokens: Optional[int] = None
+    enable_auto_reconnect: bool = False
 
     def __post_init__(self):
         self.validate_options()

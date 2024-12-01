@@ -150,3 +150,11 @@ class ResponseFunctionCallArgumentsDone(EventBase):
     output_index: int
     call_id: str
     arguments: str
+
+@dataclass
+class InputAudioBufferCleared(EventBase):
+    pass
+
+@dataclass
+class ReconnectedEvent(EventBase):
+    pass
