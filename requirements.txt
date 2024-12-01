@@ -1,6 +1,7 @@
-https://github.com/jhakulin/realtime-ai/releases/download/v0.1.3/realtime_ai-0.1.3-py3-none-any.whl
+https://github.com/jhakulin/realtime-ai/releases/download/v0.1.4/realtime_ai-0.1.4-py3-none-any.whl
 pyaudio
 numpy
 websockets
 websocket-client
 azure-cognitiveservices-speech
+scipy
