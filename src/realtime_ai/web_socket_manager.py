@@ -2,6 +2,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 import websocket  # pip install websocket-client
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 
@@ -16,11 +17,20 @@ class WebSocketManager:
     def __init__(self, options : RealtimeAIOptions, service_manager):
         self.options = options
         self.service_manager = service_manager
-        self.url = f"wss://api.openai.com/v1/realtime?model={self.options.model}"
-        self.headers = [
-            f"Authorization: Bearer {self.options.api_key}",
-            "OpenAI-Beta: realtime=v1"
-        ]
+
+        if self.options.azure_openai_endpoint:
+            self.request_id = uuid.uuid4()
+            self.url = self.options.azure_openai_endpoint + f"?api-version={self.options.azure_openai_api_version}" + f"&deployment={self.options.model}"
+            self.headers = {
+                "x-ms-client-request-id": str(self.request_id),
+                "api-key": self.options.api_key,
+            }
+        else:
+            self.url = f"wss://api.openai.com/v1/realtime?model={self.options.model}"
+            self.headers = {
+                "Authorization": f"Bearer {self.options.api_key}",
+                "openai-beta": "realtime=v1",
+            }
 
         self.ws = None
         self._receive_thread = None

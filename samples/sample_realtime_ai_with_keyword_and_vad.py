@@ -313,6 +313,28 @@ def get_vad_configuration(use_server_vad=False):
         return None  # Local VAD typically requires no special configuration
 
 
+def get_openai_configuration():
+    # The Azure endpoint shall be in the format: "wss://<service-name>.openai.azure.com/openai/realtime"
+    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    api_key = None
+    azure_api_version = None
+
+    if not azure_endpoint:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            logger.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+            return None, None, None
+    else:
+        api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
+
+        if not api_key or not azure_endpoint or not azure_api_version:
+            logger.error("Please set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_API_VERSION environment variables.")
+            return None, None, None
+
+    return azure_endpoint, api_key, azure_api_version
+
+
 def main():
     """
     Main function to initialize and run the audio processing and realtime client asynchronously.
@@ -322,10 +344,9 @@ def main():
     audio_capture = None
 
     try:
-        # Retrieve OpenAI API key from environment variables
-        api_key = os.getenv("OPENAI_API_KEY")
+
+        azure_openai_endpoint, api_key, azure_api_version = get_openai_configuration()
         if not api_key:
-            logger.error("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
             return
 
         functions = FunctionTool(functions=user_functions)
@@ -333,7 +354,7 @@ def main():
         # Define RealtimeOptions
         options = RealtimeAIOptions(
             api_key=api_key,
-            model="gpt-4o-realtime-preview-2024-10-01",
+            model="gpt-4o-realtime-preview",
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Respond concisely. You have access to a variety of tools to analyze, translate and review text and code.",
             turn_detection=get_vad_configuration(use_server_vad=False),
@@ -341,8 +362,10 @@ def main():
             tool_choice="auto",
             temperature=0.8,
             max_output_tokens=None,
-            voice="sage",
+            voice="echo",
             enable_auto_reconnect=True,
+            azure_openai_endpoint=azure_openai_endpoint,
+            azure_openai_api_version=azure_api_version
         )
 
         # Define AudioStreamOptions

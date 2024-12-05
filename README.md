@@ -94,8 +94,16 @@ audio_capture.start()
    - After that go to generated `dist` folder and install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
 
 2. **Setup**:
-   - Replace placeholders like `"OPENAI_API_KEY"` in the sample script with real information.
-   - Check system microphone access and settings to align with the project's audio requirements (e.g., 16bit PCM 24kHz mono).
+   - You need to setup following environment variables in order to use the service.
+
+   - **OPEN_AI**
+     - export OPENAI_API_KEY="Your OpenAI Key"
+     - Check system microphone access and settings to align with the project's audio requirements (e.g., 16bit PCM 24kHz mono).
+
+   - **AZURE_OPEN_AI**
+     - export AZURE_OPENAI_API_KEY="Your Azure OpenAI Key"
+     - export AZURE_OPENAI_ENDPOINT="Your Azure OpenAI Endpoint, shall be in the format: `wss://<service-name>.openai.azure.com/openai/realtime`"
+     - export AZURE_OPENAI_API_VERSION="Azure OpenAI version"
 
 3. **Execution**:
    - Run the script via command-line or an IDE:
