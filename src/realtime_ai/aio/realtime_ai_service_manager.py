@@ -137,6 +137,28 @@ class RealtimeAIServiceManager:
                     rate_limits_data = json_object['rate_limits']
                     rate_limits = [RateLimit(**rate) for rate in rate_limits_data]
                     return RateLimitsUpdated(event_id=json_object['event_id'], type=event_type, rate_limits=rate_limits)
+                elif event_type == "response.content_part.done":
+                    # Ensure only relevant fields are passed
+                    return ResponseContentPartDone(
+                        event_id=json_object['event_id'], 
+                        type=event_type,
+                        response_id=json_object.get('response_id'),
+                        item_id=json_object.get('item_id'),
+                        output_index=json_object.get('output_index'),
+                        content_index=json_object.get('content_index'),
+                        part=json_object.get('part')
+                    )
+                elif event_type == "response.content_part.added":
+                    # Ensure only relevant fields are passed
+                    return ResponseContentPartAdded(
+                        event_id=json_object['event_id'], 
+                        type=event_type,
+                        response_id=json_object.get('response_id'),
+                        item_id=json_object.get('item_id'),
+                        output_index=json_object.get('output_index'),
+                        content_index=json_object.get('content_index'),
+                        part=json_object.get('part')
+                    )
                 elif event_type == "response.function_call_arguments.done":
                     # Ensure only relevant fields are passed
                     return ResponseFunctionCallArgumentsDone(

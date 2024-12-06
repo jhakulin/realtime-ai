@@ -9,6 +9,8 @@ class RealtimeAIOptions:
     model: str
     modalities: List[str]
     instructions: str
+    azure_openai_endpoint: Optional[str] = None
+    azure_openai_api_version: Optional[str] = None
     voice: str = "alloy"
     input_audio_format: str = "pcm16"
     output_audio_format: str = "pcm16"
