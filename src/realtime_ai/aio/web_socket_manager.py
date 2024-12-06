@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import websockets
+import uuid
 from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 
 logger = logging.getLogger(__name__)
@@ -16,11 +17,20 @@ class WebSocketManager:
         self.options = options
         self.service_manager = service_manager
         self.websocket = None
-        self.url = f"wss://api.openai.com/v1/realtime?model={self.options.model}"
-        self.headers = {
-            "Authorization": f"Bearer {self.options.api_key}",
-            "OpenAI-Beta": "realtime=v1",
-        }
+
+        if self.options.azure_openai_endpoint:
+            self.request_id = uuid.uuid4()
+            self.url = self.options.azure_openai_endpoint + f"?api-version={self.options.azure_openai_api_version}" + f"&deployment={self.options.model}"
+            self.headers = {
+                "x-ms-client-request-id": str(self.request_id),
+                "api-key": self.options.api_key,
+            }
+        else:
+            self.url = f"wss://api.openai.com/v1/realtime?model={self.options.model}"
+            self.headers = {
+                "Authorization": f"Bearer {self.options.api_key}",
+                "openai-beta": "realtime=v1",
+            }
 
         self.reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
 
