@@ -120,25 +120,10 @@ class RealtimeAIClient:
 
     def update_session(self, options: RealtimeAIOptions):
         """Updates the session configuration with the provided options."""
-        event = {
-            "event_id": self.service_manager._generate_event_id(),
-            "type": "session.update",
-            "session": {
-                "modalities": options.modalities,
-                "instructions": options.instructions,
-                "voice": options.voice,
-                "input_audio_format": options.input_audio_format,
-                "output_audio_format": options.output_audio_format,
-                "input_audio_transcription": {
-                    "model": options.input_audio_transcription_model
-                },
-                "turn_detection": options.turn_detection,
-                "tools": options.tools,
-                "tool_choice": options.tool_choice,
-                "temperature": options.temperature
-            }
-        }
-        self._send_event_to_manager(event)
+        if self.is_running:
+            self.service_manager.update_session(options)
+        else:
+            self.service_manager.options = options
         self._options = options
         logger.info("RealtimeAIClient: Sent session update to server.")
 

@@ -20,14 +20,16 @@ class AudioStreamManager:
         self.is_streaming = False
         self.stream_thread = None
         self._stop_event = threading.Event()
+        self._lock = threading.RLock()
 
-    def start_stream(self):
-        if not self.is_streaming:
-            self.is_streaming = True
-            self._stop_event.clear()
-            self.stream_thread = threading.Thread(target=self._stream_audio)
-            self.stream_thread.start()
-            logger.info("Audio streaming started.")
+    def _start_stream(self):
+        with self._lock:
+            if not self.is_streaming:
+                self.is_streaming = True
+                self._stop_event.clear()
+                self.stream_thread = threading.Thread(target=self._stream_audio)
+                self.stream_thread.start()
+                logger.info("Audio streaming started.")
 
     def stop_stream(self):
         if self.is_streaming:
@@ -38,8 +40,9 @@ class AudioStreamManager:
             logger.info("Audio streaming stopped.")
 
     def write_audio_buffer_sync(self, audio_data: bytes):
-        if not self.is_streaming:
-            self.start_stream()
+        with self._lock:
+            if not self.is_streaming:
+                self._start_stream()
         logger.info("Enqueuing audio data for streaming.")
         self.audio_queue.put_nowait(audio_data)
         logger.info("Audio data enqueued for streaming.")
