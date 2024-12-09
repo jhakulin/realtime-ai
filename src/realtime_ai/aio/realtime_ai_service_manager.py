@@ -43,30 +43,10 @@ class RealtimeAIServiceManager:
     """
 
     def __init__(self, options: RealtimeAIOptions):
-        self.options = options
+        self._options = options
         self.websocket_manager = WebSocketManager(options, self)
         self.event_queue = asyncio.Queue()
         self.is_connected = False
-
-        # Pre-create session.update event details
-        self.session_update_event = {
-            "event_id": self._generate_event_id(),
-            "type": "session.update",
-            "session": {
-                "modalities": self.options.modalities,
-                "instructions": self.options.instructions,
-                "voice": self.options.voice,
-                "input_audio_format": self.options.input_audio_format,
-                "output_audio_format": self.options.output_audio_format,
-                "input_audio_transcription": {
-                    "model": self.options.input_audio_transcription_model
-                },
-                "turn_detection": self.options.turn_detection,
-                "tools": self.options.tools,
-                "tool_choice": self.options.tool_choice,
-                "temperature": self.options.temperature
-            }
-        }
 
     async def connect(self):
         try:
@@ -95,7 +75,7 @@ class RealtimeAIServiceManager:
     async def on_connected(self, reconnection: bool = False):
         self.is_connected = True
         logger.info("RealtimeAIServiceManager: Connected to WebSocket.")
-        await self.send_event(self.session_update_event)
+        await self.update_session(self._options)
         if reconnection:
             # If it's a reconnection, trigger a ReconnectedEvent
             reconnect_event = ReconnectedEvent(
@@ -178,6 +158,27 @@ class RealtimeAIServiceManager:
             logger.warning(f"RealtimeAIServiceManager: Unknown message type received: {event_type}")
         return None
 
+    async def update_session(self, options: RealtimeAIOptions) -> dict:
+        event = {
+            "event_id": self._generate_event_id(),
+            "type": "session.update",
+            "session": {
+                "modalities": options.modalities,
+                "instructions": options.instructions,
+                "voice": options.voice,
+                "input_audio_format": options.input_audio_format,
+                "output_audio_format": options.output_audio_format,
+                "input_audio_transcription": {
+                    "model": options.input_audio_transcription_model
+                },
+                "turn_detection": options.turn_detection,
+                "tools": options.tools,
+                "tool_choice": options.tool_choice,
+                "temperature": options.temperature
+            }
+        }
+        await self.send_event(event)
+
     async def clear_event_queue(self):
         """Clears all events in the event queue."""
         try:
@@ -225,3 +226,12 @@ class RealtimeAIServiceManager:
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
+    
+    @property
+    def options(self):
+        return self._options
+
+    @options.setter
+    def options(self, options: RealtimeAIOptions):
+        self._options = options
+        logger.info("RealtimeAIServiceManager: Options updated.")

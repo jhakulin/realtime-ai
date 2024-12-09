@@ -39,12 +39,12 @@ class WebSocketManager:
         Establishes a WebSocket connection.
         """
         try:
-            if self.websocket and self.websocket.open:
+            if self.websocket:
                 logger.info("WebSocketManager: Already connected.")
                 return
 
             logger.info(f"WebSocketManager: Connecting to {self.url}")
-            self.websocket = await websockets.connect(self.url, extra_headers=self.headers)
+            self.websocket = await websockets.connect(self.url, additional_headers=self.headers)
             logger.info("WebSocketManager: WebSocket connection established.")
             await self.service_manager.on_connected(reconnection=reconnection)
 
@@ -82,13 +82,15 @@ class WebSocketManager:
                 logger.info("WebSocketManager: WebSocket closed gracefully.")
             except Exception as e:
                 logger.error(f"WebSocketManager: Error closing WebSocket: {e}")
+            finally:
+                self.websocket = None
 
     async def send(self, message: dict):
         """
         Sends a message over the WebSocket.
         """
         # check if message is cancel_event
-        if self.websocket and self.websocket.open:
+        if self.websocket:
             try:
                 message_str = json.dumps(message)
                 await self.websocket.send(message_str)
