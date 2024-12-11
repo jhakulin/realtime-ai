@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 @dataclass
 class RealtimeAIOptions:
     """Configuration options for the Realtime API client."""
+    url: str = "wss://api.openai.com/v1/realtime"
     api_key: str
     model: str
     modalities: List[str]
