@@ -5,13 +5,13 @@ from typing import List, Optional, Dict, Any
 @dataclass
 class RealtimeAIOptions:
     """Configuration options for the Realtime API client."""
-    url: str = "wss://api.openai.com/v1/realtime"
     api_key: str
     model: str
     modalities: List[str]
     instructions: str
     azure_openai_endpoint: Optional[str] = None
     azure_openai_api_version: Optional[str] = None
+    url: str = "wss://api.openai.com/v1/realtime"
     voice: str = "alloy"
     input_audio_format: str = "pcm16"
     output_audio_format: str = "pcm16"
