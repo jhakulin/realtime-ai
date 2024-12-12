@@ -219,7 +219,7 @@ class RealtimeAIServiceManager:
 
     async def get_next_event(self) -> Optional[EventBase]:
         try:
-            logger.info("RealtimeAIServiceManager: Waiting for next event...")
+            logger.debug("RealtimeAIServiceManager: Waiting for next event...")
             return await asyncio.wait_for(self.event_queue.get(), timeout=5.0)
         except asyncio.TimeoutError:
             return None
