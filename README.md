@@ -5,10 +5,15 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 ### Key Features
 
 - **Real-time Audio and Text Interaction**: Capture and stream audio data to OpenAI's Realtime WebSocket APIs, enabling seamless real-time conversations with the AI assistant through both speech and text, with the ability to interrupt the assistant for dynamic and interactive dialogue.
+
 - **Local Voice Activity Detection (VAD)**: The application incorporates a local voice activity detector to identify when speech starts and ends. This feature allows the system to efficiently manage audio data, ensuring that only relevant speech segments are processed and sent to the AI service. It helps in reducing unnecessary data transmission and processing, thereby optimizing performance and resource usage.
+
 - **Keyword Detection**: Integrated with Azure Speech Services, the application supports keyword detection to trigger interactions with the AI assistant. By listening for specific trigger words (e.g., "Computer"), the system ensures that audio data is only sent to the assistant when necessary, enhancing privacy and reducing costs. This feature is particularly useful in scenarios where continuous listening is not feasible or desired.
+
 - **Modular Design**: The project is structured to allow easy customization and extension. Users can define their own functions and event handlers to tailor the application's behavior to specific needs.
+
 - **Multi-Modal Interaction**: Supports both audio and text modalities, enabling versatile interaction patterns with the AI assistant.
+
 - **Configurable AI Options**: Users can configure various AI options, such as model selection, temperature settings, and tool usage, to fine-tune the assistant's responses and behavior.
 
 ---
@@ -88,19 +93,23 @@ audio_capture.start()
 
    - Alternatively if you want to build the wheel yourself, use following command: `python setup.py sdist bdist_wheel`
    - After that go to generated `dist` folder and install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
-   - or simply install via this git url: `pip install git+https://github.com/jhakulin/realtime-ai `
+   - Or simply install via this git url: `pip install git+https://github.com/jhakulin/realtime-ai `
+
 2. **Setup**:
 
    - You need to setup following environment variables in order to use the service.
+
    - **OPEN_AI**
 
      - export OPENAI_API_KEY="Your OpenAI Key"
      - Check system microphone access and settings to align with the project's audio requirements (e.g., 16bit PCM 24kHz mono).
+
    - **AZURE_OPEN_AI**
 
      - export AZURE_OPENAI_API_KEY="Your Azure OpenAI Key"
      - export AZURE_OPENAI_ENDPOINT="Your Azure OpenAI Endpoint, shall be in the format: `wss://<service-name>.openai.azure.com/openai/realtime`"
      - export AZURE_OPENAI_API_VERSION="Azure OpenAI version"
+
 3. **Execution**:
 
    - Run the script via command-line or an IDE:
@@ -119,20 +128,24 @@ For example, the Lenovo ThinkPad P16S has been tested and provides a reliable co
 
    - Press `Windows + R` to open the Run dialog.
    - Type `control` and press `Enter` to open the Control Panel.
+
 2. **Navigate to Sound Settings**:
 
    - In the Control Panel, click on **Hardware and Sound**.
    - Click on **Sound** to open the Sound settings dialog.
+
 3. **Select Recording Device**:
 
    - In the Sound settings window, navigate to the **Recording** tab.
    - Locate and e.g. select **Microphone Array** from the list of recording devices. This setup is preferred for optimal performance and is known to work well on systems like the Lenovo ThinkPad P16S.
    - Click **Properties** to open the Microphone Properties dialog for the selected device.
+
 4. **Enable Audio Enhancements**:
 
    - In the Microphone Properties dialog, navigate to the **Advanced** tab.
    - Under the **Signal Enhancements** section, look for the option labeled **Enable audio enhancements**.
    - Check the box next to **Enable audio enhancements** to allow extra signal processing by the audio device.
+
 5. **Apply and Confirm Changes**:
 
    - Click **Apply** to save the changes.
@@ -144,9 +157,11 @@ For example, the Lenovo ThinkPad P16S has been tested and provides a reliable co
 1. **Install the PyAudio**:
 
    If you encounter installation problems in Mac, ensure you have installed portaudio by `brew install portaudio` first.
+
 2. **Install the SSL certificates**:
 
    If you encounter SSL certification problems when running the samples, install certificates via `/Applications/Python 3.x/Install Certificates.command`
+
 3. **Audio Echo Cancellation**:
 
    If your Mac do not have integrated audio echo cancellation, using e.g. AirPods is recommended to prevent assistant voice leaking into microphone input.
@@ -170,6 +185,7 @@ The sample uses Azure CognitiveServices Speech SDK for keyword detection. For co
    Install the Azure Speech SDK for Python using `pip`:
 
    `pip install azure-cognitiveservices-speech`
+
 2. **Run Sample For Quick Testing**:
    The sample code in this repository uses the `.table` file from the [Azure Speech SDK samples](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/quickstart/csharp/uwp/keyword-recognizer/helloworld/Keyword).
    This test model is configured for keyword `Computer`
