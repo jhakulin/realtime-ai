@@ -26,7 +26,7 @@ class WebSocketManager:
                 "api-key": self.options.api_key,
             }
         else:
-            self.url = f"wss://api.openai.com/v1/realtime?model={self.options.model}"
+            self.url = f"{self.options.url}?model={self.options.model}"
             self.headers = {
                 "Authorization": f"Bearer {self.options.api_key}",
                 "openai-beta": "realtime=v1",

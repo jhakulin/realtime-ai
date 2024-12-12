@@ -11,6 +11,7 @@ class RealtimeAIOptions:
     instructions: str
     azure_openai_endpoint: Optional[str] = None
     azure_openai_api_version: Optional[str] = None
+    url: str = "wss://api.openai.com/v1/realtime"
     voice: str = "alloy"
     input_audio_format: str = "pcm16"
     output_audio_format: str = "pcm16"
