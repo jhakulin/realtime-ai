@@ -39,7 +39,7 @@ class AudioStreamManager:
         if not self.is_streaming:
             self._start_stream()
         logger.info("Enqueuing audio data for streaming.")
-        await self.audio_queue.put_nowait(audio_data)
+        await self.audio_queue.put(audio_data)
         logger.info("Audio data enqueued for streaming.")
 
     async def _stream_audio(self):
