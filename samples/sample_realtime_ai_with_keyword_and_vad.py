@@ -70,7 +70,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         logger.info("Local VAD: User speech started")
         logger.info(f"on_speech_start: Current state: {self._state}")
 
-        if self._state == ConversationState.KEYWORD_DETECTED:
+        if self._state == ConversationState.KEYWORD_DETECTED or self._state == ConversationState.CONVERSATION_ACTIVE:
             self._set_state(ConversationState.CONVERSATION_ACTIVE)
             self._cancel_silence_timer()
 

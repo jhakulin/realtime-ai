@@ -15,20 +15,20 @@ class WebSocketManager:
     """
     
     def __init__(self, options : RealtimeAIOptions, service_manager):
-        self.options = options
-        self.service_manager = service_manager
+        self._options = options
+        self._service_manager = service_manager
 
-        if self.options.azure_openai_endpoint:
+        if self._options.azure_openai_endpoint:
             self.request_id = uuid.uuid4()
-            self.url = self.options.azure_openai_endpoint + f"?api-version={self.options.azure_openai_api_version}" + f"&deployment={self.options.model}"
+            self.url = self._options.azure_openai_endpoint + f"?api-version={self._options.azure_openai_api_version}" + f"&deployment={self._options.model}"
             self.headers = {
                 "x-ms-client-request-id": str(self.request_id),
-                "api-key": self.options.api_key,
+                "api-key": self._options.api_key,
             }
         else:
-            self.url = f"wss://api.openai.com/v1/realtime?model={self.options.model}"
+            self.url = f"wss://api.openai.com/v1/realtime?model={self._options.model}"
             self.headers = {
-                "Authorization": f"Bearer {self.options.api_key}",
+                "Authorization": f"Bearer {self._options.api_key}",
                 "openai-beta": "realtime=v1",
             }
 
@@ -88,30 +88,30 @@ class WebSocketManager:
         logger.info("WebSocketManager: WebSocket connection opened.")
         if self.is_reconnection:
             logger.info("WebSocketManager: Connection reopened (Reconnection).")
-            self.service_manager.on_connected(reconnection=True)
+            self._service_manager.on_connected(reconnection=True)
             self.is_reconnection = False
         else:
             logger.info("WebSocketManager: Connection opened (Initial).")
-            self.service_manager.on_connected()
+            self._service_manager.on_connected()
 
         self.is_reconnection = False 
 
     def _on_message(self, ws, message):
         logger.debug(f"WebSocketManager: Received message: {message}")
-        self.service_manager.on_message_received(message)
+        self._service_manager.on_message_received(message)
 
     def _on_error(self, ws, error):
         logger.error(f"WebSocketManager: WebSocket error: {error}")
-        self.service_manager.on_error(error)
+        self._service_manager.on_error(error)
 
     def _on_close(self, ws, close_status_code, close_msg):
         logger.warning(f"WebSocketManager: WebSocket connection closed: {close_status_code} - {close_msg}")
-        self.service_manager.on_disconnected(close_status_code, close_msg)
+        self._service_manager.on_disconnected(close_status_code, close_msg)
 
         # If the session ended due to maximum duration, attempt to reconnect
         if close_status_code == 1001 and "maximum duration of 15 minutes" in close_msg:
             logger.debug("WebSocketManager: Session ended due to maximum duration. Reconnecting...")
-            if self.options.enable_auto_reconnect:
+            if self._options.enable_auto_reconnect:
                 self._schedule_reconnect()
 
     def _schedule_reconnect(self):
