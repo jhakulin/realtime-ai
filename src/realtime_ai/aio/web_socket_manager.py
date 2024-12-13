@@ -19,20 +19,20 @@ class WebSocketManager:
         self._websocket = None
 
         if self._options.azure_openai_endpoint:
-            self.request_id = uuid.uuid4()
-            self.url = self._options.azure_openai_endpoint + f"?api-version={self._options.azure_openai_api_version}" + f"&deployment={self._options.model}"
-            self.headers = {
-                "x-ms-client-request-id": str(self.request_id),
+            request_id = uuid.uuid4()
+            self._url = self._options.azure_openai_endpoint + f"?api-version={self._options.azure_openai_api_version}" + f"&deployment={self._options.model}"
+            self._headers = {
+                "x-ms-client-request-id": str(request_id),
                 "api-key": self._options.api_key,
             }
         else:
-            self.url = f"wss://api.openai.com/v1/realtime?model={self._options.model}"
-            self.headers = {
+            self._url = f"{self._options.url}?model={self._options.model}"
+            self._headers = {
                 "Authorization": f"Bearer {self._options.api_key}",
                 "openai-beta": "realtime=v1",
             }
 
-        self.reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
+        self._reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
 
     async def connect(self, reconnection=False):
         """
@@ -43,8 +43,8 @@ class WebSocketManager:
                 logger.info("WebSocketManager: Already connected.")
                 return
 
-            logger.info(f"WebSocketManager: Connecting to {self.url}")
-            self._websocket = await websockets.connect(self.url, additional_headers=self.headers)
+            logger.info(f"WebSocketManager: Connecting to {self._url}")
+            self._websocket = await websockets.connect(self._url, additional_headers=self._headers)
             logger.info("WebSocketManager: WebSocket connection established.")
             await self._service_manager.on_connected(reconnection=reconnection)
 
@@ -62,7 +62,7 @@ class WebSocketManager:
                 logger.debug(f"WebSocketManager: Received message: {message}")
                 if "session_expired" in message and "maximum duration of 15 minutes" in message:
                     logger.info("WebSocketManager: Reconnecting due to maximum duration reached.")
-                    await asyncio.sleep(self.reconnect_delay)
+                    await asyncio.sleep(self._reconnect_delay)
                     await self.connect(reconnection=True)
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"WebSocketManager: Connection closed during receive: {e.code} - {e.reason}")

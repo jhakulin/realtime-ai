@@ -5,7 +5,7 @@ This Python project exemplifies a modular approach to interacting with OpenAI's 
 ### Key Features
 
 - **Real-time Audio and Text Interaction**: Capture and stream audio data to OpenAI's Realtime WebSocket APIs, enabling seamless real-time conversations with the AI assistant through both speech and text, with the ability to interrupt the assistant for dynamic and interactive dialogue.
-  
+
 - **Local Voice Activity Detection (VAD)**: The application incorporates a local voice activity detector to identify when speech starts and ends. This feature allows the system to efficiently manage audio data, ensuring that only relevant speech segments are processed and sent to the AI service. It helps in reducing unnecessary data transmission and processing, thereby optimizing performance and resource usage.
 
 - **Keyword Detection**: Integrated with Azure Speech Services, the application supports keyword detection to trigger interactions with the AI assistant. By listening for specific trigger words (e.g., "Computer"), the system ensures that audio data is only sent to the assistant when necessary, enhancing privacy and reducing costs. This feature is particularly useful in scenarios where continuous listening is not feasible or desired.
@@ -86,26 +86,32 @@ audio_capture.start()
 1. **Install the realtime AI Python library and dependencies**:
 
    - Run the following command in your terminal to install all the necessary dependencies as specified in the requirements.txt file.
+
    ```
    pip install -r requirements.txt
    ```
 
    - Alternatively if you want to build the wheel yourself, use following command: `python setup.py sdist bdist_wheel`
    - After that go to generated `dist` folder and install the generated wheel using following command: `pip install --force-reinstall realtime_ai-0.1.0-py3-none-any.whl`
+   - Or simply install via this git url: `pip install git+https://github.com/jhakulin/realtime-ai `
 
 2. **Setup**:
+
    - You need to setup following environment variables in order to use the service.
 
    - **OPEN_AI**
+
      - export OPENAI_API_KEY="Your OpenAI Key"
      - Check system microphone access and settings to align with the project's audio requirements (e.g., 16bit PCM 24kHz mono).
 
    - **AZURE_OPEN_AI**
+
      - export AZURE_OPENAI_API_KEY="Your Azure OpenAI Key"
      - export AZURE_OPENAI_ENDPOINT="Your Azure OpenAI Endpoint, shall be in the format: `wss://<service-name>.openai.azure.com/openai/realtime`"
      - export AZURE_OPENAI_API_VERSION="Azure OpenAI version"
 
 3. **Execution**:
+
    - Run the script via command-line or an IDE:
      ```bash
      python samples/sample_realtime_ai_with_local_vad.py
@@ -115,28 +121,33 @@ audio_capture.start()
 
 ### Audio Configuration on Windows
 
-It is important to have functional Audio Echo Cancellation (AEC) on the device running the samples to ensure clear audio playback and recording. 
+It is important to have functional Audio Echo Cancellation (AEC) on the device running the samples to ensure clear audio playback and recording.
 For example, the Lenovo ThinkPad P16S has been tested and provides a reliable configuration with its **Microphone Array**.
 
 1. **Open Control Panel**:
+
    - Press `Windows + R` to open the Run dialog.
    - Type `control` and press `Enter` to open the Control Panel.
 
 2. **Navigate to Sound Settings**:
+
    - In the Control Panel, click on **Hardware and Sound**.
    - Click on **Sound** to open the Sound settings dialog.
 
 3. **Select Recording Device**:
+
    - In the Sound settings window, navigate to the **Recording** tab.
    - Locate and e.g. select **Microphone Array** from the list of recording devices. This setup is preferred for optimal performance and is known to work well on systems like the Lenovo ThinkPad P16S.
    - Click **Properties** to open the Microphone Properties dialog for the selected device.
 
 4. **Enable Audio Enhancements**:
+
    - In the Microphone Properties dialog, navigate to the **Advanced** tab.
    - Under the **Signal Enhancements** section, look for the option labeled **Enable audio enhancements**.
    - Check the box next to **Enable audio enhancements** to allow extra signal processing by the audio device.
 
 5. **Apply and Confirm Changes**:
+
    - Click **Apply** to save the changes.
    - Click **OK** to exit the Microphone Properties dialog.
    - Click **OK** in the Sound settings window to close it.
@@ -144,15 +155,15 @@ For example, the Lenovo ThinkPad P16S has been tested and provides a reliable co
 ### Audio Configuration on Mac
 
 1. **Install the PyAudio**:
-    
-    If you encounter installation problems in Mac, ensure you have installed portaudio by `brew install portaudio` first.
+
+   If you encounter installation problems in Mac, ensure you have installed portaudio by `brew install portaudio` first.
 
 2. **Install the SSL certificates**:
-   
+
    If you encounter SSL certification problems when running the samples, install certificates via `/Applications/Python 3.x/Install Certificates.command`
 
 3. **Audio Echo Cancellation**:
-   
+
    If your Mac do not have integrated audio echo cancellation, using e.g. AirPods is recommended to prevent assistant voice leaking into microphone input.
 
 ### Alternative Audio Options
@@ -174,10 +185,10 @@ The sample uses Azure CognitiveServices Speech SDK for keyword detection. For co
    Install the Azure Speech SDK for Python using `pip`:
 
    `pip install azure-cognitiveservices-speech`
-   
+
 2. **Run Sample For Quick Testing**:
-    The sample code in this repository uses the `.table` file from the [Azure Speech SDK samples](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/quickstart/csharp/uwp/keyword-recognizer/helloworld/Keyword).
-    This test model is configured for keyword `Computer`
+   The sample code in this repository uses the `.table` file from the [Azure Speech SDK samples](https://github.com/Azure-Samples/cognitive-services-speech-sdk/tree/master/quickstart/csharp/uwp/keyword-recognizer/helloworld/Keyword).
+   This test model is configured for keyword `Computer`
 
    - Run the script via command-line or an IDE:
      ```bash
