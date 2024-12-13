@@ -18,10 +18,10 @@ class RealtimeAIClient:
     """
     def __init__(self, options: RealtimeAIOptions, stream_options: AudioStreamOptions, event_handler: RealtimeAIEventHandler):
         self._options = options
-        self.service_manager = RealtimeAIServiceManager(options)
-        self.audio_stream_manager = AudioStreamManager(stream_options, self.service_manager)
-        self.event_handler = event_handler
-        self.is_running = False
+        self._service_manager = RealtimeAIServiceManager(options)
+        self._audio_stream_manager = AudioStreamManager(stream_options, self._service_manager)
+        self._event_handler = event_handler
+        self._is_running = False
         self._lock = threading.Lock()
         
         # Initialize the consume thread and executor as None
@@ -32,14 +32,14 @@ class RealtimeAIClient:
     def start(self):
         """Starts the RealtimeAIClient."""
         with self._lock:
-            if self.is_running:
+            if self._is_running:
                 logger.warning("RealtimeAIClient: Client is already running.")
                 return
 
-            self.is_running = True
+            self._is_running = True
             self._stop_event.clear()
             try:
-                self.service_manager.connect()  # Connect to the service
+                self._service_manager.connect()  # Connect to the service
                 logger.info("RealtimeAIClient: Client started.")
 
                 # Initialize and start the ThreadPoolExecutor here
@@ -51,24 +51,24 @@ class RealtimeAIClient:
                 self._consume_thread.start()
                 logger.info("RealtimeAIClient: Event consumption thread started.")
             except Exception as e:
-                self.is_running = False
+                self._is_running = False
                 logger.error(f"RealtimeAIClient: Error during client start: {e}")
 
     def stop(self, timeout: float = 5.0):
         """Stops the RealtimeAIClient gracefully."""
         with self._lock:
-            if not self.is_running:
+            if not self._is_running:
                 logger.warning("RealtimeAIClient: Client is already stopped.")
                 return
 
-            self.is_running = False
+            self._is_running = False
 
             # Signal stop event
             self._stop_event.set()
 
             try:
-                self.audio_stream_manager.stop_stream()
-                self.service_manager.disconnect()
+                self._audio_stream_manager.stop_stream()
+                self._service_manager.disconnect()
 
                 if self._consume_thread is not None:
                     
@@ -85,7 +85,7 @@ class RealtimeAIClient:
                     logger.info("RealtimeAIClient: ThreadPoolExecutor shut down.")
                     self.executor = None
 
-                self.service_manager.clear_event_queue()
+                self._service_manager.clear_event_queue()
                 logger.info("RealtimeAIClient: Services stopped.")
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error during client stop: {e}")
@@ -93,12 +93,12 @@ class RealtimeAIClient:
     def send_audio(self, audio_data: bytes):
         """Sends audio data to the audio stream manager for processing."""
         logger.info("RealtimeAIClient: Queuing audio data for streaming.")
-        self.audio_stream_manager.write_audio_buffer_sync(audio_data)  # Ensure this is a sync method
+        self._audio_stream_manager.write_audio_buffer_sync(audio_data)  # Ensure this is a sync method
 
     def send_text(self, text: str, role: str = "user", generate_response: bool = True):
         """Sends text input to the service manager."""
         event = {
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "conversation.item.create",
             "item": {
                 "type": "message",
@@ -120,25 +120,10 @@ class RealtimeAIClient:
 
     def update_session(self, options: RealtimeAIOptions):
         """Updates the session configuration with the provided options."""
-        event = {
-            "event_id": self.service_manager._generate_event_id(),
-            "type": "session.update",
-            "session": {
-                "modalities": options.modalities,
-                "instructions": options.instructions,
-                "voice": options.voice,
-                "input_audio_format": options.input_audio_format,
-                "output_audio_format": options.output_audio_format,
-                "input_audio_transcription": {
-                    "model": options.input_audio_transcription_model
-                },
-                "turn_detection": options.turn_detection,
-                "tools": options.tools,
-                "tool_choice": options.tool_choice,
-                "temperature": options.temperature
-            }
-        }
-        self._send_event_to_manager(event)
+        if self._is_running:
+            self._service_manager.update_session(options)
+
+        self._service_manager.options = options
         self._options = options
         logger.info("RealtimeAIClient: Sent session update to server.")
 
@@ -147,12 +132,12 @@ class RealtimeAIClient:
         logger.info("RealtimeAIClient: Generating response.")
         if commit_audio_buffer:
             self._send_event_to_manager({
-                "event_id": self.service_manager._generate_event_id(),
+                "event_id": self._service_manager._generate_event_id(),
                 "type": "input_audio_buffer.commit",
             })
 
         self._send_event_to_manager({
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "response.create",
             "response": {"modalities": self.options.modalities}
         })
@@ -160,19 +145,19 @@ class RealtimeAIClient:
     def cancel_response(self):
         """Sends a response.cancel event to interrupt the model when playback is interrupted by user."""
         self._send_event_to_manager({
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "response.cancel"
         })
         logger.info("Client: Sent response.cancel event to server.")
 
         # Clear the event queue in the service manager
-        self.service_manager.clear_event_queue()
+        self._service_manager.clear_event_queue()
         logger.info("RealtimeAIClient: Event queue cleared after cancellation.")
 
     def truncate_response(self, item_id: str, content_index: int, audio_end_ms: int):
         """Sends a conversation.item.truncate event to truncate the response."""
         self._send_event_to_manager({
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "conversation.item.truncate",
             "item_id": item_id,
             "content_index": content_index,
@@ -183,7 +168,7 @@ class RealtimeAIClient:
     def clear_input_audio_buffer(self):
         """Sends an input_audio_buffer.clear event to the server."""
         self._send_event_to_manager({
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "input_audio_buffer.clear"
         })
         logger.info("Client: Sent input_audio_buffer.clear event to server.")
@@ -197,7 +182,7 @@ class RealtimeAIClient:
         """
         # Create the function call output event
         item_create_event = {
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "conversation.item.create",
             "item": {
                 "id": str(uuid.uuid4()).replace('-', ''),
@@ -213,7 +198,7 @@ class RealtimeAIClient:
 
         # Optionally trigger a response
         self._send_event_to_manager({
-            "event_id": self.service_manager._generate_event_id(),
+            "event_id": self._service_manager._generate_event_id(),
             "type": "response.create",
             "response": {"modalities": self.options.modalities}
         })
@@ -223,7 +208,7 @@ class RealtimeAIClient:
         logger.info("Consume thread: Started consuming events.")
         while not self._stop_event.is_set():
             try:
-                event = self.service_manager.get_next_event()
+                event = self._service_manager.get_next_event()
                 if event is None:
                     logger.info("Consume thread: Received sentinel, exiting.")
                     break
@@ -244,7 +229,7 @@ class RealtimeAIClient:
         """Handles the received event based on its type using the event handler."""
         event_type = event.type
         method_name = f'on_{event_type.replace(".", "_")}'
-        handler = getattr(self.event_handler, method_name, None)
+        handler = getattr(self._event_handler, method_name, None)
 
         if callable(handler):
             try:
@@ -252,17 +237,21 @@ class RealtimeAIClient:
             except Exception as e:
                 logger.error(f"Error in handler {method_name} for event {event_type}: {e}")
         else:
-            self.event_handler.on_unhandled_event(event_type, vars(event))
+            self._event_handler.on_unhandled_event(event_type, vars(event))
 
     def _send_event_to_manager(self, event):
         """Helper method to send an event to the manager."""
-        self.service_manager.send_event(event)
+        self._service_manager.send_event(event)
 
     @property
     def options(self):
         return self._options
+    
+    @property
+    def is_running(self):
+        return self._is_running
 
     # Optional: Ensure that threads are cleaned up if the object is deleted while running
     def __del__(self):
-        if self.is_running:
+        if self._is_running:
             self.stop()

@@ -14,39 +14,39 @@ class WebSocketManager:
     """
 
     def __init__(self, options: RealtimeAIOptions, service_manager):
-        self.options = options
-        self.service_manager = service_manager
-        self.websocket = None
+        self._options = options
+        self._service_manager = service_manager
+        self._websocket = None
 
-        if self.options.azure_openai_endpoint:
-            self.request_id = uuid.uuid4()
-            self.url = self.options.azure_openai_endpoint + f"?api-version={self.options.azure_openai_api_version}" + f"&deployment={self.options.model}"
-            self.headers = {
-                "x-ms-client-request-id": str(self.request_id),
-                "api-key": self.options.api_key,
+        if self._options.azure_openai_endpoint:
+            request_id = uuid.uuid4()
+            self._url = self._options.azure_openai_endpoint + f"?api-version={self._options.azure_openai_api_version}" + f"&deployment={self._options.model}"
+            self._headers = {
+                "x-ms-client-request-id": str(request_id),
+                "api-key": self._options.api_key,
             }
         else:
-            self.url = f"{self.options.url}?model={self.options.model}"
-            self.headers = {
-                "Authorization": f"Bearer {self.options.api_key}",
+            self._url = f"{self._options.url}?model={self._options.model}"
+            self._headers = {
+                "Authorization": f"Bearer {self._options.api_key}",
                 "openai-beta": "realtime=v1",
             }
 
-        self.reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
+        self._reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
 
     async def connect(self, reconnection=False):
         """
         Establishes a WebSocket connection.
         """
         try:
-            if self.websocket and self.websocket.open:
+            if self._websocket:
                 logger.info("WebSocketManager: Already connected.")
                 return
 
-            logger.info(f"WebSocketManager: Connecting to {self.url}")
-            self.websocket = await websockets.connect(self.url, extra_headers=self.headers)
+            logger.info(f"WebSocketManager: Connecting to {self._url}")
+            self._websocket = await websockets.connect(self._url, additional_headers=self._headers)
             logger.info("WebSocketManager: WebSocket connection established.")
-            await self.service_manager.on_connected(reconnection=reconnection)
+            await self._service_manager.on_connected(reconnection=reconnection)
 
             asyncio.create_task(self._receive_messages())  # Begin listening as a separate task
         except Exception as e:
@@ -57,16 +57,16 @@ class WebSocketManager:
         Listens for incoming WebSocket messages and delegates them to the service manager.
         """
         try:
-            async for message in self.websocket:
-                await self.service_manager.on_message_received(message)
+            async for message in self._websocket:
+                await self._service_manager.on_message_received(message)
                 logger.debug(f"WebSocketManager: Received message: {message}")
                 if "session_expired" in message and "maximum duration of 15 minutes" in message:
                     logger.info("WebSocketManager: Reconnecting due to maximum duration reached.")
-                    await asyncio.sleep(self.reconnect_delay)
+                    await asyncio.sleep(self._reconnect_delay)
                     await self.connect(reconnection=True)
         except websockets.exceptions.ConnectionClosed as e:
             logger.warning(f"WebSocketManager: Connection closed during receive: {e.code} - {e.reason}")
-            await self.service_manager.on_disconnected(e.code, e.reason)
+            await self._service_manager.on_disconnected(e.code, e.reason)
         except asyncio.CancelledError:
             logger.info("WebSocketManager: Receive task was cancelled.")
         except Exception as e:
@@ -76,26 +76,28 @@ class WebSocketManager:
         """
         Gracefully disconnects the WebSocket connection.
         """
-        if self.websocket:
+        if self._websocket:
             try:
-                await self.websocket.close()
+                await self._websocket.close()
                 logger.info("WebSocketManager: WebSocket closed gracefully.")
             except Exception as e:
                 logger.error(f"WebSocketManager: Error closing WebSocket: {e}")
+            finally:
+                self._websocket = None
 
     async def send(self, message: dict):
         """
         Sends a message over the WebSocket.
         """
         # check if message is cancel_event
-        if self.websocket and self.websocket.open:
+        if self._websocket:
             try:
                 message_str = json.dumps(message)
-                await self.websocket.send(message_str)
+                await self._websocket.send(message_str)
                 logger.debug(f"WebSocketManager: Sent message: {message_str}")
             except Exception as e:
                 logger.error(f"WebSocketManager: Send failed: {e}")
-                await self.service_manager.on_error(e)
+                await self._service_manager.on_error(e)
         else:
             logger.error("WebSocketManager: Cannot send message. WebSocket is not connected.")
             raise ConnectionError("WebSocket is not connected.")
