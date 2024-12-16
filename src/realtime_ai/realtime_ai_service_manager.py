@@ -175,7 +175,8 @@ class RealtimeAIServiceManager:
                 "turn_detection": options.turn_detection,
                 "tools": options.tools,
                 "tool_choice": options.tool_choice,
-                "temperature": options.temperature
+                "temperature": options.temperature,
+                "max_response_output_tokens": options.max_output_tokens
             }
         }
         self.send_event(event)
