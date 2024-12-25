@@ -43,14 +43,14 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
 # Define RealtimeAIOptions for OpenAI Realtime service configuration
 options = RealtimeAIOptions(
    api_key=api_key,
-   model="gpt-4o-realtime-preview-2024-10-01",
+   model="gpt-4o-realtime-preview",
    modalities=["audio", "text"],
    instructions="You are a helpful assistant. Respond concisely.",
    turn_detection=None, # or server vad
    tools=functions.definitions,
    tool_choice="auto",
    temperature=0.8,
-   max_output_tokens=None,
+   max_output_tokens=1000,
    voice="sage",
    enable_auto_reconnect=True,
 )
