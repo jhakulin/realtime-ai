@@ -32,12 +32,13 @@ class AudioStreamManager:
                 logger.info("Audio streaming started.")
 
     def stop_stream(self):
-        if self._is_streaming:
-            self._is_streaming = False
-            self._stop_event.set()  # Signal to the thread to stop
-            if self._stream_thread:
-                self._stream_thread.join()
-            logger.info("Audio streaming stopped.")
+        with self._lock:
+            if self._is_streaming:
+                self._is_streaming = False
+                self._stop_event.set()  # Signal to the thread to stop
+                if self._stream_thread:
+                    self._stream_thread.join()
+                logger.info("Audio streaming stopped.")
 
     def write_audio_buffer_sync(self, audio_data: bytes):
         with self._lock:
