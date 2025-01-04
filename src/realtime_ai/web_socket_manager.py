@@ -15,48 +15,48 @@ class WebSocketManager:
     """
     
     def __init__(self, options : RealtimeAIOptions, service_manager):
-        self.options = options
-        self.service_manager = service_manager
+        self._options = options
+        self._service_manager = service_manager
 
-        if self.options.azure_openai_endpoint:
-            self.request_id = uuid.uuid4()
-            self.url = self.options.azure_openai_endpoint + f"?api-version={self.options.azure_openai_api_version}" + f"&deployment={self.options.model}"
-            self.headers = {
-                "x-ms-client-request-id": str(self.request_id),
-                "api-key": self.options.api_key,
+        if self._options.azure_openai_endpoint:
+            request_id = uuid.uuid4()
+            self._url = self._options.azure_openai_endpoint + f"?api-version={self._options.azure_openai_api_version}" + f"&deployment={self._options.model}"
+            self._headers = {
+                "x-ms-client-request-id": str(request_id),
+                "api-key": self._options.api_key,
             }
         else:
-            self.url = f"{self.options.url}?model={self.options.model}"
-            self.headers = {
-                "Authorization": f"Bearer {self.options.api_key}",
+            self._url = f"{self._options.url}?model={self._options.model}"
+            self._headers = {
+                "Authorization": f"Bearer {self._options.api_key}",
                 "openai-beta": "realtime=v1",
             }
 
-        self.ws = None
+        self._ws = None
         self._receive_thread = None
-        self.reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
-        self.is_reconnection = False
+        self._reconnect_delay = 5 # Time to wait before attempting to reconnect, in seconds
+        self._is_reconnection = False
 
     def connect(self):
         """
         Establishes a WebSocket connection.
         """
         try:
-            if self.ws and self.ws.sock and self.ws.sock.connected:
+            if self._ws and self._ws.sock and self._ws.sock.connected:
                 logger.info("WebSocketManager: Already connected.")
                 return
     
-            logger.info(f"WebSocketManager: Connecting to {self.url}")
-            self.ws = websocket.WebSocketApp(
-                self.url,
+            logger.info(f"WebSocketManager: Connecting to {self._url}")
+            self._ws = websocket.WebSocketApp(
+                self._url,
                 on_open=self._on_open,
                 on_message=self._on_message,
                 on_error=self._on_error,
                 on_close=self._on_close,
-                header=self.headers
+                header=self._headers
             )
 
-            self._receive_thread = threading.Thread(target=self.ws.run_forever)
+            self._receive_thread = threading.Thread(target=self._ws.run_forever)
             self._receive_thread.start()
             logger.info("WebSocketManager: WebSocket connection established.")
         except Exception as e:
@@ -66,8 +66,8 @@ class WebSocketManager:
         """
         Gracefully disconnects the WebSocket connection.
         """
-        if self.ws:
-            self.ws.close()
+        if self._ws:
+            self._ws.close()
             if self._receive_thread:
                 self._receive_thread.join()
             logger.info("WebSocketManager: WebSocket closed gracefully.")
@@ -76,46 +76,46 @@ class WebSocketManager:
         """
         Sends a message over the WebSocket.
         """
-        if self.ws and self.ws.sock and self.ws.sock.connected:
+        if self._ws and self._ws.sock and self._ws.sock.connected:
             try:
                 message_str = json.dumps(message)
-                self.ws.send(message_str)
+                self._ws.send(message_str)
                 logger.debug(f"WebSocketManager: Sent message: {message_str}")
             except Exception as e:
                 logger.error(f"WebSocketManager: Send failed: {e}")
 
     def _on_open(self, ws):
         logger.info("WebSocketManager: WebSocket connection opened.")
-        if self.is_reconnection:
+        if self._is_reconnection:
             logger.info("WebSocketManager: Connection reopened (Reconnection).")
-            self.service_manager.on_connected(reconnection=True)
-            self.is_reconnection = False
+            self._service_manager.on_connected(reconnection=True)
+            self._is_reconnection = False
         else:
             logger.info("WebSocketManager: Connection opened (Initial).")
-            self.service_manager.on_connected()
+            self._service_manager.on_connected()
 
-        self.is_reconnection = False 
+        self._is_reconnection = False 
 
     def _on_message(self, ws, message):
         logger.debug(f"WebSocketManager: Received message: {message}")
-        self.service_manager.on_message_received(message)
+        self._service_manager.on_message_received(message)
 
     def _on_error(self, ws, error):
         logger.error(f"WebSocketManager: WebSocket error: {error}")
-        self.service_manager.on_error(error)
+        self._service_manager.on_error(error)
 
     def _on_close(self, ws, close_status_code, close_msg):
         logger.warning(f"WebSocketManager: WebSocket connection closed: {close_status_code} - {close_msg}")
-        self.service_manager.on_disconnected(close_status_code, close_msg)
+        self._service_manager.on_disconnected(close_status_code, close_msg)
 
         # If the session ended due to maximum duration, attempt to reconnect
         if close_status_code == 1001 and "maximum duration of 15 minutes" in close_msg:
             logger.debug("WebSocketManager: Session ended due to maximum duration. Reconnecting...")
-            if self.options.enable_auto_reconnect:
+            if self._options.enable_auto_reconnect:
                 self._schedule_reconnect()
 
     def _schedule_reconnect(self):
         logger.info("WebSocketManager: Scheduling reconnection...")
-        time.sleep(self.reconnect_delay)
-        self.is_reconnection = True
+        time.sleep(self._reconnect_delay)
+        self._is_reconnection = True
         self.connect()

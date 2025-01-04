@@ -76,7 +76,7 @@ class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
         logger.info("Local VAD: User speech started")
         logger.info(f"on_speech_start: Current state: {self._state}")
 
-        if self._state == ConversationState.KEYWORD_DETECTED:
+        if self._state == ConversationState.KEYWORD_DETECTED or self._state == ConversationState.CONVERSATION_ACTIVE:
             asyncio.run_coroutine_threadsafe(self._set_state(ConversationState.CONVERSATION_ACTIVE), self._event_loop)
             asyncio.run_coroutine_threadsafe(self._cancel_silence_timer(), self._event_loop)
 
@@ -384,7 +384,6 @@ async def main():
             tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
-            max_output_tokens=None,
             voice="echo",
             enable_auto_reconnect=True,
             azure_openai_endpoint=azure_openai_endpoint,

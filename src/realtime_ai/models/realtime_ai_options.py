@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 
 @dataclass
@@ -26,7 +26,7 @@ class RealtimeAIOptions:
     tools: List[Dict[str, Any]] = field(default_factory=list)
     tool_choice: str = "auto"
     temperature: float = 0.8
-    max_output_tokens: Optional[int] = None
+    max_output_tokens: Union[int, str] = "inf"
     enable_auto_reconnect: bool = False
 
     def __post_init__(self):
