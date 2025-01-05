@@ -71,6 +71,8 @@ class WebSocketManager:
             if self._receive_thread:
                 self._receive_thread.join()
             logger.info("WebSocketManager: WebSocket closed gracefully.")
+            self._ws = None
+            self._receive_thread = None
 
     def send(self, message: dict):
         """
@@ -109,7 +111,7 @@ class WebSocketManager:
         self._service_manager.on_disconnected(close_status_code, close_msg)
 
         # If the session ended due to maximum duration, attempt to reconnect
-        if close_status_code == 1001 and "maximum duration of 15 minutes" in close_msg:
+        if close_status_code == 1001 and "Your session hit the maximum duration" in close_msg:
             logger.debug("WebSocketManager: Session ended due to maximum duration. Reconnecting...")
             if self._options.enable_auto_reconnect:
                 self._schedule_reconnect()
