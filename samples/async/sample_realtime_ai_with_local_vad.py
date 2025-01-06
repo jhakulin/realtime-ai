@@ -3,6 +3,7 @@ import logging
 import base64
 import os, sys, json
 from typing import Any, Dict
+from pathlib import Path
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
@@ -35,6 +36,9 @@ logging.getLogger("websockets.client").setLevel(logging.ERROR)
 
 # Root logger for general logging
 logger = logging.getLogger()
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+RESOURCES_DIR = SCRIPT_DIR / "../resources"
 
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
@@ -331,7 +335,7 @@ async def main():
             }
         if USE_SILERO_VAD_MODEL:
             logger.info("using Silero VAD...")
-            vad_parameters["model_path"] = "samples/resources/silero_vad.onnx"
+            vad_parameters["model_path"] = str(RESOURCES_DIR / "silero_vad.onnx")
         else:
             logger.info("using VoiceActivityDetector...")
 

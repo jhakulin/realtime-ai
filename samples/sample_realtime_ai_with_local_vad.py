@@ -3,6 +3,7 @@ import base64
 import os, json
 from typing import Any, Dict
 import threading
+from pathlib import Path
 
 from utils.audio_playback import AudioPlayer
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
@@ -29,6 +30,9 @@ logging.getLogger("realtime_ai").setLevel(logging.ERROR)
 
 # Root logger for general logging
 logger = logging.getLogger()
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+RESOURCES_DIR = SCRIPT_DIR / "resources"
 
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
@@ -310,7 +314,7 @@ def main():
             }
         if USE_SILERO_VAD_MODEL:
             logger.info("using Silero VAD...")
-            vad_parameters["model_path"] = "samples/resources/silero_vad.onnx"
+            vad_parameters["model_path"] = str(RESOURCES_DIR / "silero_vad.onnx")
         else:
             logger.info("using VoiceActivityDetector...")
 

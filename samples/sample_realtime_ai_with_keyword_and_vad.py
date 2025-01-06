@@ -3,7 +3,7 @@ import base64
 import os, json
 from typing import Any, Dict
 import threading
-import time
+from pathlib import Path
 from enum import Enum, auto
 
 from utils.audio_playback import AudioPlayer
@@ -31,6 +31,9 @@ logging.getLogger("realtime_ai").setLevel(logging.ERROR)
 
 # Root logger for general logging
 logger = logging.getLogger()
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+RESOURCES_DIR = SCRIPT_DIR / "resources"
 
 
 class ConversationState(Enum):
@@ -397,7 +400,7 @@ def main():
             }
         if USE_SILERO_VAD_MODEL:
             logger.info("using Silero VAD...")
-            vad_parameters["model_path"] = "samples/resources/silero_vad.onnx"
+            vad_parameters["model_path"] = str(RESOURCES_DIR / "silero_vad.onnx")
         else:
             logger.info("using VoiceActivityDetector...")
 
@@ -411,7 +414,7 @@ def main():
             cross_fade_duration_ms=20,
             vad_parameters=vad_parameters,
             enable_wave_capture=False,
-            keyword_model_file="resources/kws.table",
+            keyword_model_file=str(RESOURCES_DIR / "kws.table"),
         )
 
         logger.info("Recording... Press Ctrl+C to stop.")
