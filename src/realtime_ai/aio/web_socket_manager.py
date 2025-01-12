@@ -101,3 +101,12 @@ class WebSocketManager:
         else:
             logger.error("WebSocketManager: Cannot send message. WebSocket is not connected.")
             raise ConnectionError("WebSocket is not connected.")
+
+    @property
+    def options(self):
+        return self._options
+    
+    @options.setter
+    def options(self, options: RealtimeAIOptions):
+        self._options = options
+        logger.info(f"WebSocketManager: Options updated: {options}")

@@ -234,4 +234,6 @@ class RealtimeAIServiceManager:
     @options.setter
     def options(self, options: RealtimeAIOptions):
         self._options = options
+        if self._websocket_manager:
+            self._websocket_manager.options = options
         logger.info("RealtimeAIServiceManager: Options updated.")
