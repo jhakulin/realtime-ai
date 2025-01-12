@@ -3,6 +3,7 @@ import base64
 import os, json
 from typing import Any, Dict
 import threading
+from pathlib import Path
 
 from utils.audio_playback import AudioPlayer
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
@@ -29,6 +30,9 @@ logging.getLogger("realtime_ai").setLevel(logging.ERROR)
 
 # Root logger for general logging
 logger = logging.getLogger()
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+RESOURCES_DIR = SCRIPT_DIR / "resources"
 
 
 class MyAudioCaptureEventHandler(AudioCaptureEventHandler):
@@ -300,6 +304,19 @@ def main():
             client=client,
             event_handler=event_handler
         )
+        vad_parameters={
+                "sample_rate": 24000,
+                "chunk_size": 1024,
+                "window_duration": 1.5,
+                "silence_ratio": 1.5,
+                "min_speech_duration": 0.3,
+                "min_silence_duration": 1.0
+            }
+        if USE_SILERO_VAD_MODEL:
+            logger.info("using Silero VAD...")
+            vad_parameters["model_path"] = str(RESOURCES_DIR / "silero_vad.onnx")
+        else:
+            logger.info("using VoiceActivityDetector...")
 
         # Initialize AudioCapture with the event handler
         audio_capture = AudioCapture(
@@ -309,14 +326,7 @@ def main():
             frames_per_buffer=1024,
             buffer_duration_sec=1.0,
             cross_fade_duration_ms=20,
-            vad_parameters={
-                "sample_rate": 24000,
-                "chunk_size": 1024,
-                "window_duration": 1.5,
-                "silence_ratio": 1.5,
-                "min_speech_duration": 0.3,
-                "min_silence_duration": 1.0
-            },
+            vad_parameters=vad_parameters,
             enable_wave_capture=False
         )
 
@@ -353,4 +363,5 @@ def main():
 
 
 if __name__ == "__main__":
+    USE_SILERO_VAD_MODEL = True
     main()
