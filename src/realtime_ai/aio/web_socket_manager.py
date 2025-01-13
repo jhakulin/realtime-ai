@@ -60,7 +60,7 @@ class WebSocketManager:
             async for message in self._websocket:
                 await self._service_manager.on_message_received(message)
                 logger.debug(f"WebSocketManager: Received message: {message}")
-                if "session_expired" in message and "maximum duration of 15 minutes" in message:
+                if "session_expired" in message and "Your session hit the maximum duration" in message:
                     logger.info("WebSocketManager: Reconnecting due to maximum duration reached.")
                     await asyncio.sleep(self._reconnect_delay)
                     await self.connect(reconnection=True)
@@ -101,3 +101,12 @@ class WebSocketManager:
         else:
             logger.error("WebSocketManager: Cannot send message. WebSocket is not connected.")
             raise ConnectionError("WebSocket is not connected.")
+
+    @property
+    def options(self):
+        return self._options
+    
+    @options.setter
+    def options(self, options: RealtimeAIOptions):
+        self._options = options
+        logger.info(f"WebSocketManager: Options updated: {options}")
