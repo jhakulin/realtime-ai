@@ -105,7 +105,7 @@ class AudioCapture:
 
         if vad_parameters is not None:
             try:
-                if vad_parameters.get("model_path"):
+                if "model_path" in vad_parameters and isinstance(vad_parameters["model_path"], str) and vad_parameters["model_path"].strip():
                     self.vad = SileroVoiceActivityDetector(**vad_parameters)
                 else:
                     self.vad = VoiceActivityDetector(**vad_parameters)
@@ -160,7 +160,7 @@ class AudioCapture:
             except Exception as e:
                 logger.error(f"Failed to start AzureKeywordRecognizer: {e}")
 
-        # ensure the pyaudio instance is initialized
+        # Ensure the PyAudio instance is initialized
         if not self.pyaudio_instance:
             self.pyaudio_instance = pyaudio.PyAudio()
 

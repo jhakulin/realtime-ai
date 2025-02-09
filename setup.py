@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="realtime-ai",
-    version="0.1.8",
+    version="0.1.9",
     description="Python SDK for real-time audio processing with OpenAI's Realtime REST API.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -12,10 +12,9 @@ setup(
     package_dir={"": "src"},
     install_requires=[
         "pyaudio",
-        "numpy",
+        "numpy>=1.24,<2.2",  # Ensures compatibility with numba
         "websockets",
         "websocket-client",
-        "azure-cognitiveservices-speech",
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

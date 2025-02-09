@@ -199,8 +199,12 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
                 # Properly acquire the lock with 'await' and spread the usage over two lines
                 await self._lock.acquire()  # Wait until the lock is available, then acquire it
                 try:
-                    self._call_id_to_function_name[call_id] = function_name
-                    logger.debug(f"Registered function call. Call ID: {call_id}, Function Name: {function_name}")
+                    # Only register the call_id if we haven't seen it before
+                    if call_id in self._call_id_to_function_name:
+                        logger.debug(f"Ignoring duplicated function call registration for call_id: {call_id}")
+                    else:
+                        self._call_id_to_function_name[call_id] = function_name
+                        logger.debug(f"Registered new function call. Call ID: {call_id}, Function Name: {function_name}")
                 finally:
                     # Ensure the lock is released even if an exception occurs
                     self._lock.release()
@@ -319,13 +323,28 @@ async def main():
         await client.start()
 
         loop = asyncio.get_running_loop()
-        
+
         audio_capture_event_handler = MyAudioCaptureEventHandler(
             client=client,
             event_handler=event_handler,
             event_loop=loop,
         )
-        vad_parameters={
+
+        # Set local VAD parameters depending on the VAD model used
+        if USE_SILERO_VAD_MODEL:
+            logger.info("Using Silero VAD...")
+            vad_parameters = {
+                "sample_rate": 24000,
+                "chunk_size": 1024,
+                "window_size_samples": 512,
+                "threshold": 0.25,
+                "min_speech_duration": 0.3,
+                "min_silence_duration": 1.0,
+                "model_path": str(RESOURCES_DIR / "silero_vad.onnx")
+            }
+        else:
+            logger.info("Using VoiceActivityDetector...")
+            vad_parameters = {
                 "sample_rate": 24000,
                 "chunk_size": 1024,
                 "window_duration": 1.5,
@@ -333,11 +352,6 @@ async def main():
                 "min_speech_duration": 0.3,
                 "min_silence_duration": 1.0
             }
-        if USE_SILERO_VAD_MODEL:
-            logger.info("using Silero VAD...")
-            vad_parameters["model_path"] = str(RESOURCES_DIR / "silero_vad.onnx")
-        else:
-            logger.info("using VoiceActivityDetector...")
 
         # Initialize AudioCapture with the event handler
         audio_capture = AudioCapture(
