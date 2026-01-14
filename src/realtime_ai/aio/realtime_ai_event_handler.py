@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict
+
 from realtime_ai.models.realtime_ai_events import *
 
 
@@ -11,15 +12,25 @@ class RealtimeAIEventHandler(ABC):
         pass
 
     @abstractmethod
-    async def on_input_audio_buffer_speech_stopped(self, event: InputAudioBufferSpeechStopped) -> None:
+    async def on_input_audio_buffer_speech_stopped(
+        self, event: InputAudioBufferSpeechStopped
+    ) -> None:
         pass
 
     @abstractmethod
-    async def on_input_audio_buffer_committed(self, event: InputAudioBufferCommitted) -> None:
+    async def on_input_audio_buffer_committed(
+        self, event: InputAudioBufferCommitted
+    ) -> None:
+        pass
+
+    async def on_audio_buffer_cleared(self, event: EventBase) -> None:
+        """Handle audio buffer cleared event. Default implementation does nothing."""
         pass
 
     @abstractmethod
-    async def on_conversation_item_created(self, event: ConversationItemCreated) -> None:
+    async def on_conversation_item_created(
+        self, event: ConversationItemCreated
+    ) -> None:
         pass
 
     @abstractmethod
@@ -27,7 +38,9 @@ class RealtimeAIEventHandler(ABC):
         pass
 
     @abstractmethod
-    async def on_response_content_part_added(self, event: ResponseContentPartAdded) -> None:
+    async def on_response_content_part_added(
+        self, event: ResponseContentPartAdded
+    ) -> None:
         pass
 
     @abstractmethod
@@ -35,7 +48,9 @@ class RealtimeAIEventHandler(ABC):
         pass
 
     @abstractmethod
-    async def on_response_audio_transcript_delta(self, event: ResponseAudioTranscriptDelta) -> None:
+    async def on_response_audio_transcript_delta(
+        self, event: ResponseAudioTranscriptDelta
+    ) -> None:
         pass
 
     @abstractmethod
@@ -43,7 +58,9 @@ class RealtimeAIEventHandler(ABC):
         pass
 
     @abstractmethod
-    async def on_conversation_item_input_audio_transcription_completed(self, event: ConversationItemInputAudioTranscriptionCompleted) -> None:
+    async def on_conversation_item_input_audio_transcription_completed(
+        self, event: ConversationItemInputAudioTranscriptionCompleted
+    ) -> None:
         pass
 
     @abstractmethod
@@ -51,11 +68,15 @@ class RealtimeAIEventHandler(ABC):
         pass
 
     @abstractmethod
-    async def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone) -> None:
+    async def on_response_audio_transcript_done(
+        self, event: ResponseAudioTranscriptDone
+    ) -> None:
         pass
 
     @abstractmethod
-    async def on_response_content_part_done(self, event: ResponseContentPartDone) -> None:
+    async def on_response_content_part_done(
+        self, event: ResponseContentPartDone
+    ) -> None:
         pass
 
     @abstractmethod
@@ -75,22 +96,32 @@ class RealtimeAIEventHandler(ABC):
         pass
 
     @abstractmethod
-    async def on_input_audio_buffer_speech_started(self, event: InputAudioBufferSpeechStarted) -> None:
+    async def on_input_audio_buffer_speech_started(
+        self, event: InputAudioBufferSpeechStarted
+    ) -> None:
         pass
 
     @abstractmethod
-    async def on_response_output_item_added(self, event: ResponseOutputItemAdded) -> None:
+    async def on_response_output_item_added(
+        self, event: ResponseOutputItemAdded
+    ) -> None:
         pass
 
     @abstractmethod
-    async def on_response_function_call_arguments_delta(self, event: ResponseFunctionCallArgumentsDelta) -> None:
+    async def on_response_function_call_arguments_delta(
+        self, event: ResponseFunctionCallArgumentsDelta
+    ) -> None:
         pass
 
     @abstractmethod
-    async def on_response_function_call_arguments_done(self, event: ResponseFunctionCallArgumentsDone) -> None:
+    async def on_response_function_call_arguments_done(
+        self, event: ResponseFunctionCallArgumentsDone
+    ) -> None:
         pass
 
-    @abstractmethod
-    async def on_unhandled_event(self, event_type: str, event_data: Dict[str, Any]) -> None:
+    async def on_unhandled_event(
+        self, event_type: str, event_data: Dict[str, Any]
+    ) -> None:
         import logging
-        logging.warning(f"Unhandled Event Type: {event_type}, Data: {event_data}")
+
+        logging.warning(f"Unhandled Event: {event_type} - {event_data}")

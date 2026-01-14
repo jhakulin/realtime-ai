@@ -1,21 +1,39 @@
+import asyncio
 import logging
-import base64
-import threading
 import queue
+import threading
+
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
-from realtime_ai.realtime_ai_service_manager import RealtimeAIServiceManager
+from realtime_ai.providers.base_provider import BaseProvider
 
 logger = logging.getLogger(__name__)
 
 
 class AudioStreamManager:
     """
-    Manages streaming audio data to the Realtime API via the Service Manager in a synchronous manner.
+    Manages streaming audio data to Realtime AI providers in a synchronous manner.
+
+    This class provides buffering and streaming capabilities for audio data,
+    delegating the actual transmission to the provider implementation.
     """
 
-    def __init__(self, stream_options: AudioStreamOptions, service_manager: RealtimeAIServiceManager):
+    def __init__(
+        self,
+        stream_options: AudioStreamOptions,
+        provider: BaseProvider,
+        provider_loop=None,
+    ):
+        """
+        Initialize AudioStreamManager.
+
+        Args:
+            stream_options: Audio stream configuration options
+            provider: Provider instance to send audio data to
+            provider_loop: Event loop for async provider operations (for sync client)
+        """
         self._stream_options = stream_options
-        self._service_manager = service_manager
+        self._provider = provider
+        self._provider_loop = provider_loop
         self._audio_queue = queue.Queue()
         self._is_streaming = False
         self._stream_thread = None
@@ -44,28 +62,34 @@ class AudioStreamManager:
         with self._lock:
             if not self._is_streaming:
                 self._start_stream()
-        logger.info("Enqueuing audio data for streaming.")
+        logger.debug("Enqueuing audio data for streaming.")
         self._audio_queue.put_nowait(audio_data)
-        logger.info("Audio data enqueued for streaming.")
+        logger.debug("Audio data enqueued for streaming.")
 
     def _stream_audio(self):
+        """Stream audio chunks from queue to provider."""
         logger.info(f"Streaming audio task started, is_streaming: {self._is_streaming}")
 
         while self._is_streaming and not self._stop_event.is_set():
             try:
-                audio_chunk = self._audio_queue.get(timeout=1)  # Block for a short moment
+                audio_chunk = self._audio_queue.get(
+                    timeout=1
+                )  # Block for a short moment
                 processed_audio = self._process_audio(audio_chunk)
-                encoded_audio = base64.b64encode(processed_audio).decode()
 
-                # Send input_audio_buffer.append event
-                append_event = {
-                    "event_id": self._service_manager._generate_event_id(),
-                    "type": "input_audio_buffer.append",
-                    "audio": encoded_audio
-                }
+                # Send audio data to provider (provider handles encoding and event format)
+                if self._provider_loop:
+                    # For sync client with async provider, use event loop
+                    future = asyncio.run_coroutine_threadsafe(
+                        self._provider.send_audio(processed_audio), self._provider_loop
+                    )
+                    future.result(timeout=5)
+                else:
+                    # For async client, this should not be used (use async AudioStreamManager)
+                    # But if it is, we can try to run it synchronously
+                    asyncio.run(self._provider.send_audio(processed_audio))
 
-                self._service_manager.send_event(append_event)
-                logger.info("input_audio_buffer.append event sent.")
+                logger.debug("Audio data sent to provider.")
 
             except queue.Empty:
                 # If the queue is empty, just continue looping
