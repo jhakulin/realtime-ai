@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime AI - Server-Side Streaming Test Client</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        .status-dot.connected {
+            background: #4CAF50;
+        }
+        .status-dot.connecting {
+            background: #FF9800;
+            animation: pulse 1s infinite;
+        }
+        .status-dot.recording {
+            background: #f44336;
+            animation: pulse 0.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #1976D2;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #d32f2f;
+        }
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-success:hover:not(:disabled) {
+            background: #388E3C;
+        }
+        .transcript {
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        .message {
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .message.user {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+        .message.assistant {
+            background: #f5f5f5;
+            margin-right: 20%;
+        }
+        .message.system {
+            background: #fff3e0;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .role {
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+            color: #666;
+        }
+        .text-input {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .text-input input {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        .info {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .info code {
+            background: #c8e6c9;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Realtime AI Test Client</h1>
+    <p class="subtitle">Server-Side Streaming Demo - No Server Hardware Required</p>
+
+    <div class="card">
+        <div class="info">
+            <strong>Instructions:</strong><br>
+            1. Start the server: <code>python sample_server_side_streaming.py</code><br>
+            2. Click "Connect" to establish WebSocket connection<br>
+            3. Click "Start Recording" to capture microphone and stream to AI<br>
+            4. AI responses will be played through your speakers
+        </div>
+
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" class="btn-primary" onclick="toggleConnection()">Connect</button>
+            <button id="recordBtn" class="btn-success" onclick="toggleRecording()" disabled>Start Recording</button>
+            <button id="cancelBtn" class="btn-danger" onclick="cancelResponse()" disabled>Cancel Response</button>
+        </div>
+
+        <div class="text-input">
+            <input type="text" id="textInput" placeholder="Or type a message..." onkeypress="handleKeyPress(event)" disabled>
+            <button id="sendBtn" class="btn-primary" onclick="sendText()" disabled>Send</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-bottom: 15px;">Conversation</h3>
+        <div class="transcript" id="transcript"></div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // Gapless Audio Player
+        // Uses time-based scheduling to eliminate clicks between chunks
+        // =====================================================================
+        class GaplessAudioPlayer {
+            constructor(sampleRate = 24000) {
+                this.sampleRate = sampleRate;
+                this.audioContext = null;
+                this.nextScheduledTime = 0;
+                this.isPlaying = false;
+                this.audioQueue = [];
+                this.scheduledSources = [];
+                // Schedule audio slightly ahead to prevent underruns
+                this.scheduleAheadTime = 0.1; // 100ms lookahead
+                this.schedulerInterval = null;
+            }
+
+            init() {
+                if (!this.audioContext || this.audioContext.state === 'closed') {
+                    this.audioContext = new AudioContext({ sampleRate: this.sampleRate });
+                }
+                // Resume if suspended (browser autoplay policy)
+                if (this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
+            }
+
+            enqueue(pcm16ArrayBuffer) {
+                this.init();
+
+                // Convert PCM16 to Float32
+                const pcm16 = new Int16Array(pcm16ArrayBuffer);
+                const float32 = new Float32Array(pcm16.length);
+                for (let i = 0; i < pcm16.length; i++) {
+                    float32[i] = pcm16[i] / 32768.0;
+                }
+
+                this.audioQueue.push(float32);
+
+                if (!this.isPlaying) {
+                    this.startScheduler();
+                }
+            }
+
+            startScheduler() {
+                if (this.isPlaying) return;
+
+                this.isPlaying = true;
+                // Start scheduling from current time + small buffer
+                this.nextScheduledTime = this.audioContext.currentTime + 0.05;
+
+                // Run scheduler frequently to keep audio scheduled ahead
+                this.schedulerInterval = setInterval(() => this.scheduleAudio(), 20);
+                this.scheduleAudio(); // Initial schedule
+            }
+
+            scheduleAudio() {
+                if (!this.audioContext || this.audioContext.state === 'closed') return;
+
+                const currentTime = this.audioContext.currentTime;
+
+                // Schedule audio chunks while we have data and aren't too far ahead
+                while (this.audioQueue.length > 0 &&
+                       this.nextScheduledTime < currentTime + this.scheduleAheadTime) {
+
+                    const float32Data = this.audioQueue.shift();
+
+                    // Create audio buffer
+                    const audioBuffer = this.audioContext.createBuffer(
+                        1, // mono
+                        float32Data.length,
+                        this.sampleRate
+                    );
+                    audioBuffer.getChannelData(0).set(float32Data);
+
+                    // Create source and schedule it
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(this.audioContext.destination);
+
+                    // Schedule to start exactly when previous chunk ends
+                    const startTime = Math.max(this.nextScheduledTime, currentTime);
+                    source.start(startTime);
+
+                    // Track for cleanup
+                    this.scheduledSources.push(source);
+
+                    // Calculate when this chunk ends
+                    const duration = float32Data.length / this.sampleRate;
+                    this.nextScheduledTime = startTime + duration;
+                }
+
+                // Clean up finished sources
+                this.scheduledSources = this.scheduledSources.filter(source => {
+                    try {
+                        return source.buffer !== null; // Still valid
+                    } catch {
+                        return false;
+                    }
+                });
+
+                // Stop scheduler if no more audio and all scheduled audio has played
+                if (this.audioQueue.length === 0 &&
+                    this.nextScheduledTime <= currentTime + 0.1) {
+                    this.stopScheduler();
+                }
+            }
+
+            stopScheduler() {
+                if (this.schedulerInterval) {
+                    clearInterval(this.schedulerInterval);
+                    this.schedulerInterval = null;
+                }
+                this.isPlaying = false;
+            }
+
+            clear() {
+                // Stop all scheduled sources
+                this.scheduledSources.forEach(source => {
+                    try {
+                        source.stop();
+                    } catch (e) {
+                        // Already stopped
+                    }
+                });
+                this.scheduledSources = [];
+                this.audioQueue = [];
+                this.stopScheduler();
+                this.nextScheduledTime = 0;
+            }
+
+            close() {
+                this.clear();
+                if (this.audioContext && this.audioContext.state !== 'closed') {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                }
+            }
+        }
+
+        // =====================================================================
+        // Main Application
+        // =====================================================================
+        let ws = null;
+        let recordingContext = null;
+        let recordingStream = null;
+        let isRecording = false;
+
+        // Separate audio player for playback (isolated from recording)
+        const audioPlayer = new GaplessAudioPlayer(24000);
+
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const connectBtn = document.getElementById('connectBtn');
+        const recordBtn = document.getElementById('recordBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const transcript = document.getElementById('transcript');
+
+        function setStatus(status, text) {
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+        }
+
+        function addMessage(role, text, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'message ' + (isError ? 'error' : role);
+
+            if (role !== 'system') {
+                const roleDiv = document.createElement('div');
+                roleDiv.className = 'role';
+                roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+                div.appendChild(roleDiv);
+            }
+
+            const textDiv = document.createElement('div');
+            textDiv.textContent = text;
+            div.appendChild(textDiv);
+
+            transcript.appendChild(div);
+            transcript.scrollTop = transcript.scrollHeight;
+        }
+
+        function toggleConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const url = 'ws://localhost:8765';
+            setStatus('connecting', 'Connecting...');
+            addMessage('system', 'Connecting to server...');
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                setStatus('connected', 'Connected');
+                connectBtn.textContent = 'Disconnect';
+                recordBtn.disabled = false;
+                textInput.disabled = false;
+                sendBtn.disabled = false;
+                cancelBtn.disabled = false;
+                addMessage('system', 'Connected to server');
+            };
+
+            ws.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+
+                switch (data.type) {
+                    case 'audio':
+                        // Enqueue audio for gapless playback
+                        const audioBytes = base64ToArrayBuffer(data.data);
+                        audioPlayer.enqueue(audioBytes);
+                        break;
+
+                    case 'transcript_delta':
+                        // Real-time transcript update (could show typing indicator)
+                        break;
+
+                    case 'transcript_done':
+                        addMessage(data.role, data.text);
+                        break;
+
+                    case 'status':
+                        if (data.message === 'connected') {
+                            addMessage('system', 'AI session ready');
+                        }
+                        break;
+
+                    case 'error':
+                        addMessage('error', data.message, true);
+                        break;
+
+                    case 'vad':
+                        if (data.event === 'speech_started') {
+                            // User started speaking - could show visual feedback
+                        }
+                        break;
+
+                    case 'clear_audio':
+                        // Server detected interruption - clear audio queue immediately
+                        audioPlayer.clear();
+                        console.log('Audio queue cleared due to interruption');
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                setStatus('', 'Disconnected');
+                connectBtn.textContent = 'Connect';
+                recordBtn.disabled = true;
+                textInput.disabled = true;
+                sendBtn.disabled = true;
+                cancelBtn.disabled = true;
+                addMessage('system', 'Disconnected from server');
+                stopRecording();
+            };
+
+            ws.onerror = (error) => {
+                addMessage('error', 'Connection error', true);
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                // Request microphone access
+                recordingStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 24000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Create dedicated context for recording (separate from playback)
+                recordingContext = new AudioContext({ sampleRate: 24000 });
+                const source = recordingContext.createMediaStreamSource(recordingStream);
+
+                // Use ScriptProcessor for capturing audio
+                // Note: In production, consider using AudioWorklet for better performance
+                const processor = recordingContext.createScriptProcessor(4096, 1, 1);
+
+                source.connect(processor);
+                processor.connect(recordingContext.destination);
+
+                processor.onaudioprocess = (e) => {
+                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const pcm16 = floatTo16BitPCM(inputData);
+                    ws.send(pcm16);
+                };
+
+                isRecording = true;
+                setStatus('recording', 'Recording...');
+                recordBtn.textContent = 'Stop Recording';
+                recordBtn.className = 'btn-danger';
+                addMessage('system', 'Recording started - speak now');
+
+            } catch (error) {
+                addMessage('error', 'Microphone access denied: ' + error.message, true);
+                console.error('Error accessing microphone:', error);
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+
+            // Stop all tracks in the stream
+            if (recordingStream) {
+                recordingStream.getTracks().forEach(track => track.stop());
+                recordingStream = null;
+            }
+
+            // Close recording context
+            if (recordingContext && recordingContext.state !== 'closed') {
+                recordingContext.close();
+                recordingContext = null;
+            }
+
+            setStatus('connected', 'Connected');
+            recordBtn.textContent = 'Start Recording';
+            recordBtn.className = 'btn-success';
+        }
+
+        function floatTo16BitPCM(float32Array) {
+            const buffer = new ArrayBuffer(float32Array.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < float32Array.length; i++) {
+                let s = Math.max(-1, Math.min(1, float32Array[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function sendText() {
+            const text = textInput.value.trim();
+            if (text && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'text', text: text }));
+                addMessage('user', text);
+                textInput.value = '';
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendText();
+            }
+        }
+
+        function cancelResponse() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'cancel' }));
+                audioPlayer.clear(); // Clear pending audio
+                addMessage('system', 'Response cancelled');
+            }
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            stopRecording();
+            audioPlayer.close();
+            if (ws) ws.close();
+        });
+    </script>
+</body>
+</html>
