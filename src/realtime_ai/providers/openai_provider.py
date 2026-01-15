@@ -166,6 +166,59 @@ class OpenAIProvider(BaseProvider):
             raise
 
     # ============================================================================
+    # Image Operations
+    # ============================================================================
+
+    async def send_image(
+        self,
+        image_data: bytes,
+        image_format: str = "png",
+    ) -> None:
+        """
+        Send image to OpenAI Realtime API.
+
+        Images are sent via conversation.item.create with input_image content type.
+
+        Args:
+            image_data: Raw image bytes (PNG, JPEG, WebP, GIF)
+            image_format: Image format ('png', 'jpeg', 'webp', 'gif')
+        """
+        import base64
+
+        logger.info(
+            f"OpenAIProvider: Sending image (size={len(image_data)} bytes, format={image_format})"
+        )
+
+        try:
+            encoded_image = base64.b64encode(image_data).decode("utf-8")
+            data_url = f"data:image/{image_format};base64,{encoded_image}"
+
+            event = {
+                "event_id": self._generate_event_id(),
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_image",
+                            "image_url": data_url,
+                        }
+                    ],
+                },
+            }
+            await self._service_manager.send_event(event)
+            logger.info(
+                f"OpenAIProvider: Successfully sent image (size={len(image_data)} bytes)"
+            )
+        except Exception as e:
+            logger.error(
+                f"OpenAIProvider: Failed to send image - {type(e).__name__}: {str(e)}",
+                exc_info=True,
+            )
+            raise
+
+    # ============================================================================
     # Session Management
     # ============================================================================
 

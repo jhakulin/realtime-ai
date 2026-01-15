@@ -247,6 +247,118 @@
             0%, 100% { opacity: 0.3; }
             50% { opacity: 1; }
         }
+        /* Image upload styles */
+        .image-upload-container {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .image-upload-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .image-upload-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .image-upload-btn input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        .image-preview-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .image-preview {
+            position: relative;
+            display: inline-block;
+        }
+        .image-preview img {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+        }
+        .image-preview .remove-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #f44336;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .image-preview .remove-btn:hover {
+            background: #d32f2f;
+        }
+        .message-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .message-image:hover {
+            transform: scale(1.02);
+        }
+        .image-status {
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+        .image-status.supported {
+            color: #4CAF50;
+        }
+        .image-status.unsupported {
+            color: #f44336;
+        }
+        /* Image modal for full-size view */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .image-modal.active {
+            display: flex;
+        }
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+        }
+        .image-modal .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -260,7 +372,8 @@
             2. Click "Connect" to establish WebSocket connection<br>
             3. Choose Voice or Text mode to communicate with the AI<br>
             4. In Voice mode: Click "Start Recording" to speak<br>
-            5. In Text mode: Type your message and press Enter or click Send
+            5. In Text mode: Type your message and press Enter or click Send<br>
+            6. Upload images to share with the AI (OpenAI/Gemini only)
         </div>
 
         <div class="status">
@@ -302,6 +415,27 @@
                 Auto-mute in text mode
             </label>
         </div>
+
+        <!-- Image Upload -->
+        <div class="image-upload-container">
+            <div class="image-upload-row">
+                <button class="btn-secondary image-upload-btn" id="imageUploadBtn" disabled>
+                    Upload Image
+                    <input type="file" id="imageInput" accept="image/*" onchange="handleImageSelect(event)">
+                </button>
+                <button class="btn-primary" id="sendImageBtn" onclick="sendImage()" disabled style="display: none;">
+                    Send Image
+                </button>
+                <span class="image-status" id="imageStatus"></span>
+            </div>
+            <div class="image-preview-container" id="imagePreviewContainer"></div>
+        </div>
+    </div>
+
+    <!-- Image Modal for full-size view -->
+    <div class="image-modal" id="imageModal" onclick="closeImageModal()">
+        <span class="close-btn">&times;</span>
+        <img id="modalImage" src="" alt="Full size image">
     </div>
 
     <div class="card">
@@ -430,6 +564,7 @@
         let currentMode = 'voice';
         let streamingMessageElement = null;
         let streamingText = '';
+        let pendingImage = null;  // Store image data before sending
 
         const audioPlayer = new GaplessAudioPlayer(24000);
 
@@ -448,6 +583,13 @@
         const textModeBtn = document.getElementById('textModeBtn');
         const playAudioCheckbox = document.getElementById('playAudioCheckbox');
         const muteOnTextCheckbox = document.getElementById('muteOnTextCheckbox');
+        const imageInput = document.getElementById('imageInput');
+        const imageUploadBtn = document.getElementById('imageUploadBtn');
+        const sendImageBtn = document.getElementById('sendImageBtn');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const imageStatus = document.getElementById('imageStatus');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
 
         // =====================================================================
         // Mode Management
@@ -592,6 +734,7 @@
                 textInput.disabled = false;
                 sendBtn.disabled = false;
                 cancelBtn.disabled = false;
+                imageUploadBtn.disabled = false;
                 addMessage('system', 'Connected to server');
 
                 if (currentMode === 'text') {
@@ -656,6 +799,20 @@
                         audioPlayer.clear();
                         console.log('Audio queue cleared due to interruption');
                         break;
+
+                    case 'image_sent':
+                        // Image was successfully sent to AI
+                        imageStatus.textContent = 'Image sent to AI';
+                        imageStatus.className = 'image-status supported';
+                        setTimeout(() => { imageStatus.textContent = ''; }, 3000);
+                        break;
+
+                    case 'image_error':
+                        // Error sending image
+                        addMessage('error', 'Image error: ' + data.message, { isError: true });
+                        imageStatus.textContent = data.message;
+                        imageStatus.className = 'image-status unsupported';
+                        break;
                 }
             };
 
@@ -666,8 +823,11 @@
                 textInput.disabled = true;
                 sendBtn.disabled = true;
                 cancelBtn.disabled = true;
+                imageUploadBtn.disabled = true;
+                sendImageBtn.disabled = true;
                 addMessage('system', 'Disconnected from server');
                 stopRecording();
+                clearPendingImage();
                 if (streamingMessageElement) {
                     finalizeStreamingMessage();
                 }
@@ -766,6 +926,147 @@
                 event.preventDefault();
                 sendText();
             }
+        }
+
+        // =====================================================================
+        // Image Handling
+        // =====================================================================
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                addMessage('error', 'Please select an image file', { isError: true });
+                return;
+            }
+
+            // Validate file size (max 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                addMessage('error', 'Image too large. Maximum size is 10MB.', { isError: true });
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target.result;
+                const base64 = dataUrl.split(',')[1];
+                const format = file.type.split('/')[1];  // png, jpeg, etc.
+
+                pendingImage = {
+                    data: base64,
+                    format: format,
+                    dataUrl: dataUrl,
+                    name: file.name
+                };
+
+                showImagePreview(dataUrl, file.name);
+                sendImageBtn.style.display = 'inline-block';
+                sendImageBtn.disabled = false;
+                imageStatus.textContent = `Ready to send: ${file.name}`;
+                imageStatus.className = 'image-status';
+            };
+
+            reader.onerror = () => {
+                addMessage('error', 'Error reading image file', { isError: true });
+            };
+
+            reader.readAsDataURL(file);
+
+            // Reset file input so same file can be selected again
+            event.target.value = '';
+        }
+
+        function showImagePreview(dataUrl, fileName) {
+            imagePreviewContainer.innerHTML = '';
+
+            const preview = document.createElement('div');
+            preview.className = 'image-preview';
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.alt = fileName;
+            img.title = 'Click to view full size';
+            img.onclick = () => openImageModal(dataUrl);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.innerHTML = '×';
+            removeBtn.title = 'Remove image';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                clearPendingImage();
+            };
+
+            preview.appendChild(img);
+            preview.appendChild(removeBtn);
+            imagePreviewContainer.appendChild(preview);
+        }
+
+        function clearPendingImage() {
+            pendingImage = null;
+            imagePreviewContainer.innerHTML = '';
+            sendImageBtn.style.display = 'none';
+            sendImageBtn.disabled = true;
+            imageStatus.textContent = '';
+        }
+
+        function sendImage() {
+            if (!pendingImage || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+            // Send image to server
+            ws.send(JSON.stringify({
+                type: 'image',
+                data: pendingImage.data,
+                format: pendingImage.format
+            }));
+
+            // Add image message to conversation
+            addImageMessage('user', pendingImage.dataUrl, pendingImage.name);
+
+            // Clear preview
+            clearPendingImage();
+        }
+
+        function addImageMessage(role, dataUrl, fileName) {
+            const div = document.createElement('div');
+            div.className = 'message ' + role;
+
+            const roleDiv = document.createElement('div');
+            roleDiv.className = 'role';
+            roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = 'message-type';
+            typeSpan.textContent = '(image)';
+            roleDiv.appendChild(typeSpan);
+            div.appendChild(roleDiv);
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.textContent = `Sent image: ${fileName}`;
+            div.appendChild(textDiv);
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.className = 'message-image';
+            img.alt = fileName;
+            img.title = 'Click to view full size';
+            img.onclick = () => openImageModal(dataUrl);
+            div.appendChild(img);
+
+            transcript.appendChild(div);
+            transcript.scrollTop = transcript.scrollHeight;
+        }
+
+        function openImageModal(dataUrl) {
+            modalImage.src = dataUrl;
+            imageModal.classList.add('active');
+        }
+
+        function closeImageModal() {
+            imageModal.classList.remove('active');
+            modalImage.src = '';
         }
 
         // =====================================================================

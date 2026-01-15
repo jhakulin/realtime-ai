@@ -309,6 +309,60 @@ class GeminiProvider(BaseProvider):
 
         await self._send_message(message)
 
+    async def send_image(
+        self,
+        image_data: bytes,
+        image_format: str = "jpeg",
+    ) -> None:
+        """
+        Send image to Gemini Live API.
+
+        Images are sent via realtimeInput with video field.
+        Gemini treats images as single video frames.
+
+        Gemini format:
+        {
+            "realtimeInput": {
+                "video": {
+                    "mimeType": "image/jpeg",
+                    "data": "<base64>"
+                }
+            }
+        }
+
+        Args:
+            image_data: Raw image bytes (JPEG recommended, PNG also supported)
+            image_format: Image format ('jpeg', 'png', 'webp', 'gif')
+
+        Note:
+            Gemini recommends JPEG format at quality 90 for best results.
+            Native resolution is 768x768.
+        """
+        # Encode to base64
+        encoded_image = base64.b64encode(image_data).decode('utf-8')
+
+        # Map format to MIME type
+        mime_type = f"image/{image_format}"
+
+        logger.info(
+            f"GeminiProvider: Sending image (size={len(image_data)} bytes, format={image_format})"
+        )
+
+        # Send as realtimeInput message with video field
+        message = {
+            "realtimeInput": {
+                "video": {
+                    "mimeType": mime_type,
+                    "data": encoded_image
+                }
+            }
+        }
+
+        await self._send_message(message)
+        logger.info(
+            f"GeminiProvider: Successfully sent image (size={len(image_data)} bytes)"
+        )
+
     async def update_session(self, options: RealtimeAIOptions) -> None:
         """
         Updates the session configuration using setup message.

@@ -124,6 +124,41 @@ class RealtimeAIClient:
         if generate_response:
             await self.generate_response(commit_audio_buffer=False)
 
+    async def send_image(
+        self,
+        image_data: bytes,
+        image_format: str = "png",
+        generate_response: bool = True,
+    ):
+        """
+        Sends an image to the provider for vision processing.
+
+        Args:
+            image_data: Raw image bytes (PNG, JPEG, WebP, GIF)
+            image_format: Image format ('png', 'jpeg', 'webp', 'gif')
+            generate_response: Whether to automatically generate a response
+
+        Raises:
+            NotImplementedError: If provider doesn't support image input
+
+        Supported providers:
+            - OpenAI: Yes
+            - Gemini: Yes (JPEG recommended)
+            - Grok: No
+
+        Example:
+            with open("screenshot.png", "rb") as f:
+                await client.send_image(f.read(), image_format="png")
+        """
+        await self._provider.send_image(image_data, image_format)
+        logger.info(
+            f"RealtimeAIClient: Sent image to {self._provider_name} provider."
+        )
+
+        # Generate a response if required
+        if generate_response:
+            await self.generate_response(commit_audio_buffer=False)
+
     async def update_session(self, options: RealtimeAIOptions):
         """Updates the session configuration with the provided options."""
         if self._is_running:

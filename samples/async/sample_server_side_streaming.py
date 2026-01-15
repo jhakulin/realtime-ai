@@ -9,6 +9,7 @@ Features:
 - Local ONNX-based VAD (Silero) - no server-side VAD dependency
 - Hardware-free operation - no microphone/speakers needed
 - WebSocket bridge between clients and AI providers
+- Image/vision support (OpenAI and Gemini providers)
 
 Use Cases:
 - Web applications with browser-based audio
@@ -29,11 +30,16 @@ To run:
 
 Client Protocol:
     - Send: Raw PCM16 audio bytes (24kHz, mono)
+    - Send JSON messages:
+        {"type": "text", "text": "hello"}
+        {"type": "image", "data": "<base64>", "format": "png"}
     - Receive JSON messages:
         {"type": "audio", "data": "<base64 encoded audio>"}
         {"type": "transcript", "text": "..."}
         {"type": "status", "message": "..."}
         {"type": "vad", "event": "speech_started|speech_stopped"}
+        {"type": "image_sent", "message": "..."}
+        {"type": "image_error", "message": "..."}
 """
 
 import asyncio
@@ -554,9 +560,11 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
 
         # Configure AI options
         # When using local VAD, disable server-side VAD (turn_detection=None)
+        # Note: Use "gpt-realtime" for image/vision support
+        #       Use "gpt-4o-realtime-preview" for audio/text only (no image support)
         options = RealtimeAIOptions(
             api_key=api_key,
-            model="gpt-4o-realtime-preview",
+            model="gpt-realtime",
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Keep responses concise.",
             voice="alloy",
@@ -630,6 +638,32 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
                         if text:
                             await ai_client.send_text(text)
                             logger.info(f"Sent text to AI: {text}")
+
+                    elif msg_type == "image":
+                        # Image input from client
+                        image_data = data.get("data", "")
+                        image_format = data.get("format", "png")
+                        if image_data:
+                            try:
+                                image_bytes = base64.b64decode(image_data)
+                                await ai_client.send_image(image_bytes, image_format=image_format)
+                                logger.info(f"Sent image to AI ({len(image_bytes)} bytes, format={image_format})")
+                                await websocket.send(json.dumps({
+                                    "type": "image_sent",
+                                    "message": "Image sent to AI"
+                                }))
+                            except NotImplementedError as e:
+                                logger.warning(f"Image not supported by provider: {e}")
+                                await websocket.send(json.dumps({
+                                    "type": "image_error",
+                                    "message": f"Provider does not support images: {PROVIDER}"
+                                }))
+                            except Exception as e:
+                                logger.error(f"Error sending image: {e}")
+                                await websocket.send(json.dumps({
+                                    "type": "image_error",
+                                    "message": str(e)
+                                }))
 
                     elif msg_type == "generate":
                         # Explicit request to generate response
@@ -705,6 +739,7 @@ async def main():
     logger.info("  - Send raw PCM16 audio as binary WebSocket messages")
     logger.info("  - Or send JSON: {\"type\": \"audio\", \"data\": \"<base64>\"}")
     logger.info("  - Or send JSON: {\"type\": \"text\", \"text\": \"hello\"}")
+    logger.info("  - Or send JSON: {\"type\": \"image\", \"data\": \"<base64>\", \"format\": \"png\"}")
     logger.info("")
     logger.info("Press Ctrl+C to stop the server")
     logger.info("=" * 60)

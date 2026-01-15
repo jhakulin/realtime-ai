@@ -285,3 +285,34 @@ class BaseProvider(ABC):
         Default implementation does nothing.
         """
         pass
+
+    # ============================================================================
+    # Optional: Image/Vision Operations
+    # ============================================================================
+
+    async def send_image(
+        self,
+        image_data: bytes,
+        image_format: str = "png",
+    ) -> None:
+        """
+        Send an image to the provider for vision processing.
+
+        This is an optional capability - not all providers support images.
+        Providers that support images should override this method.
+
+        Args:
+            image_data: Raw image bytes (PNG, JPEG, WebP, GIF)
+            image_format: Image format ('png', 'jpeg', 'webp', 'gif')
+
+        Raises:
+            NotImplementedError: If provider doesn't support image input
+
+        Supported providers:
+            - OpenAI: Yes (via conversation.item.create with input_image)
+            - Gemini: Yes (via realtime_input.video)
+            - Grok: No (audio/text only)
+        """
+        raise NotImplementedError(
+            f"Provider '{self.provider_name}' does not support image input"
+        )
