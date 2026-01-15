@@ -320,7 +320,8 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
             await self._send_to_client({
                 "type": "transcript_delta",
                 "role": "assistant",
-                "text": event.delta
+                "text": event.delta,
+                "response_id": event.response_id
             })
 
     async def on_response_audio_transcript_done(

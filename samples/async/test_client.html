@@ -63,6 +63,7 @@
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+            align-items: center;
         }
         button {
             padding: 12px 24px;
@@ -97,9 +98,19 @@
         .btn-success:hover:not(:disabled) {
             background: #388E3C;
         }
+        .btn-secondary {
+            background: #9e9e9e;
+            color: white;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #757575;
+        }
+        .btn-secondary.active {
+            background: #673ab7;
+        }
         .transcript {
-            min-height: 200px;
-            max-height: 400px;
+            min-height: 300px;
+            max-height: 500px;
             overflow-y: auto;
             padding: 15px;
             background: #fafafa;
@@ -110,23 +121,30 @@
             margin-bottom: 12px;
             padding: 10px;
             border-radius: 6px;
+            max-width: 85%;
         }
         .message.user {
             background: #e3f2fd;
-            margin-left: 20%;
+            margin-left: auto;
         }
         .message.assistant {
             background: #f5f5f5;
-            margin-right: 20%;
+            margin-right: auto;
+        }
+        .message.assistant.streaming {
+            background: #fff8e1;
+            border: 1px dashed #ffc107;
         }
         .message.system {
             background: #fff3e0;
             font-size: 0.9em;
             color: #666;
+            max-width: 100%;
         }
         .message.error {
             background: #ffebee;
             color: #c62828;
+            max-width: 100%;
         }
         .role {
             font-weight: bold;
@@ -134,10 +152,17 @@
             margin-bottom: 4px;
             color: #666;
         }
+        .message-type {
+            font-size: 0.75em;
+            color: #999;
+            margin-left: 8px;
+        }
+        .text-input-container {
+            margin-top: 15px;
+        }
         .text-input {
             display: flex;
             gap: 10px;
-            margin-top: 15px;
         }
         .text-input input {
             flex: 1;
@@ -145,6 +170,10 @@
             font-size: 16px;
             border: 1px solid #ddd;
             border-radius: 6px;
+        }
+        .text-input input:focus {
+            outline: none;
+            border-color: #2196F3;
         }
         .info {
             background: #e8f5e9;
@@ -158,35 +187,120 @@
             padding: 2px 6px;
             border-radius: 3px;
         }
+        .mode-toggle {
+            display: flex;
+            gap: 5px;
+            background: #eee;
+            padding: 4px;
+            border-radius: 8px;
+            margin-left: auto;
+        }
+        .mode-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .mode-btn.active {
+            background: white;
+            color: #333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .mode-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.5);
+        }
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+        .audio-controls label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+        }
+        .voice-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .typing-indicator {
+            display: inline-block;
+        }
+        .typing-indicator span {
+            animation: typing 1s infinite;
+            display: inline-block;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
     <h1>Realtime AI Test Client</h1>
-    <p class="subtitle">Server-Side Streaming Demo - No Server Hardware Required</p>
+    <p class="subtitle">Server-Side Streaming Demo - Voice & Text Communication</p>
 
     <div class="card">
         <div class="info">
             <strong>Instructions:</strong><br>
             1. Start the server: <code>python sample_server_side_streaming.py</code><br>
             2. Click "Connect" to establish WebSocket connection<br>
-            3. Click "Start Recording" to capture microphone and stream to AI<br>
-            4. AI responses will be played through your speakers
+            3. Choose Voice or Text mode to communicate with the AI<br>
+            4. In Voice mode: Click "Start Recording" to speak<br>
+            5. In Text mode: Type your message and press Enter or click Send
         </div>
 
         <div class="status">
             <div class="status-dot" id="statusDot"></div>
             <span id="statusText">Disconnected</span>
+
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="voiceModeBtn" onclick="setMode('voice')">Voice</button>
+                <button class="mode-btn" id="textModeBtn" onclick="setMode('text')">Text</button>
+            </div>
         </div>
 
         <div class="controls">
             <button id="connectBtn" class="btn-primary" onclick="toggleConnection()">Connect</button>
-            <button id="recordBtn" class="btn-success" onclick="toggleRecording()" disabled>Start Recording</button>
-            <button id="cancelBtn" class="btn-danger" onclick="cancelResponse()" disabled>Cancel Response</button>
+            <button id="cancelBtn" class="btn-danger" onclick="cancelResponse()" disabled>Cancel</button>
         </div>
 
-        <div class="text-input">
-            <input type="text" id="textInput" placeholder="Or type a message..." onkeypress="handleKeyPress(event)" disabled>
-            <button id="sendBtn" class="btn-primary" onclick="sendText()" disabled>Send</button>
+        <!-- Voice Mode Controls -->
+        <div class="voice-controls" id="voiceControls">
+            <button id="recordBtn" class="btn-success" onclick="toggleRecording()" disabled>Start Recording</button>
+        </div>
+
+        <!-- Text Mode Controls -->
+        <div class="text-input-container" id="textControls" style="display: none;">
+            <div class="text-input">
+                <input type="text" id="textInput" placeholder="Type your message here..." onkeypress="handleKeyPress(event)" disabled>
+                <button id="sendBtn" class="btn-primary" onclick="sendText()" disabled>Send</button>
+            </div>
+        </div>
+
+        <!-- Audio Options -->
+        <div class="audio-controls">
+            <label>
+                <input type="checkbox" id="playAudioCheckbox" checked onchange="toggleAudioPlayback()">
+                Play audio responses
+            </label>
+            <label>
+                <input type="checkbox" id="muteOnTextCheckbox">
+                Auto-mute in text mode
+            </label>
         </div>
     </div>
 
@@ -198,7 +312,6 @@
     <script>
         // =====================================================================
         // Gapless Audio Player
-        // Uses time-based scheduling to eliminate clicks between chunks
         // =====================================================================
         class GaplessAudioPlayer {
             constructor(sampleRate = 24000) {
@@ -208,33 +321,37 @@
                 this.isPlaying = false;
                 this.audioQueue = [];
                 this.scheduledSources = [];
-                // Schedule audio slightly ahead to prevent underruns
-                this.scheduleAheadTime = 0.1; // 100ms lookahead
+                this.scheduleAheadTime = 0.1;
                 this.schedulerInterval = null;
+                this.muted = false;
             }
 
             init() {
                 if (!this.audioContext || this.audioContext.state === 'closed') {
                     this.audioContext = new AudioContext({ sampleRate: this.sampleRate });
                 }
-                // Resume if suspended (browser autoplay policy)
                 if (this.audioContext.state === 'suspended') {
                     this.audioContext.resume();
                 }
             }
 
-            enqueue(pcm16ArrayBuffer) {
-                this.init();
+            setMuted(muted) {
+                this.muted = muted;
+                if (muted) {
+                    this.clear();
+                }
+            }
 
-                // Convert PCM16 to Float32
+            enqueue(pcm16ArrayBuffer) {
+                if (this.muted) return;
+
+                this.init();
                 const pcm16 = new Int16Array(pcm16ArrayBuffer);
                 const float32 = new Float32Array(pcm16.length);
                 for (let i = 0; i < pcm16.length; i++) {
                     float32[i] = pcm16[i] / 32768.0;
                 }
-
                 this.audioQueue.push(float32);
-
                 if (!this.isPlaying) {
                     this.startScheduler();
                 }
@@ -242,64 +359,36 @@
 
             startScheduler() {
                 if (this.isPlaying) return;
-
                 this.isPlaying = true;
-                // Start scheduling from current time + small buffer
                 this.nextScheduledTime = this.audioContext.currentTime + 0.05;
-
-                // Run scheduler frequently to keep audio scheduled ahead
                 this.schedulerInterval = setInterval(() => this.scheduleAudio(), 20);
-                this.scheduleAudio(); // Initial schedule
+                this.scheduleAudio();
             }
 
             scheduleAudio() {
                 if (!this.audioContext || this.audioContext.state === 'closed') return;
-
                 const currentTime = this.audioContext.currentTime;
 
-                // Schedule audio chunks while we have data and aren't too far ahead
                 while (this.audioQueue.length > 0 &&
                        this.nextScheduledTime < currentTime + this.scheduleAheadTime) {
-
                     const float32Data = this.audioQueue.shift();
-
-                    // Create audio buffer
-                    const audioBuffer = this.audioContext.createBuffer(
-                        1, // mono
-                        float32Data.length,
-                        this.sampleRate
-                    );
+                    const audioBuffer = this.audioContext.createBuffer(1, float32Data.length, this.sampleRate);
                     audioBuffer.getChannelData(0).set(float32Data);
-
-                    // Create source and schedule it
                     const source = this.audioContext.createBufferSource();
                     source.buffer = audioBuffer;
                     source.connect(this.audioContext.destination);
-
-                    // Schedule to start exactly when previous chunk ends
                     const startTime = Math.max(this.nextScheduledTime, currentTime);
                     source.start(startTime);
-
-                    // Track for cleanup
                     this.scheduledSources.push(source);
-
-                    // Calculate when this chunk ends
                     const duration = float32Data.length / this.sampleRate;
                     this.nextScheduledTime = startTime + duration;
                 }
 
-                // Clean up finished sources
                 this.scheduledSources = this.scheduledSources.filter(source => {
-                    try {
-                        return source.buffer !== null; // Still valid
-                    } catch {
-                        return false;
-                    }
+                    try { return source.buffer !== null; } catch { return false; }
                 });
 
-                // Stop scheduler if no more audio and all scheduled audio has played
-                if (this.audioQueue.length === 0 &&
-                    this.nextScheduledTime <= currentTime + 0.1) {
+                if (this.audioQueue.length === 0 && this.nextScheduledTime <= currentTime + 0.1) {
                     this.stopScheduler();
                 }
             }
@@ -313,13 +402,8 @@
             }
 
             clear() {
-                // Stop all scheduled sources
                 this.scheduledSources.forEach(source => {
-                    try {
-                        source.stop();
-                    } catch (e) {
-                        // Already stopped
-                    }
+                    try { source.stop(); } catch (e) {}
                 });
                 this.scheduledSources = [];
                 this.audioQueue = [];
@@ -343,10 +427,13 @@
         let recordingContext = null;
         let recordingStream = null;
         let isRecording = false;
+        let currentMode = 'voice';
+        let streamingMessageElement = null;
+        let streamingText = '';
 
-        // Separate audio player for playback (isolated from recording)
         const audioPlayer = new GaplessAudioPlayer(24000);
 
+        // DOM Elements
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const connectBtn = document.getElementById('connectBtn');
@@ -355,31 +442,134 @@
         const textInput = document.getElementById('textInput');
         const sendBtn = document.getElementById('sendBtn');
         const transcript = document.getElementById('transcript');
+        const voiceControls = document.getElementById('voiceControls');
+        const textControls = document.getElementById('textControls');
+        const voiceModeBtn = document.getElementById('voiceModeBtn');
+        const textModeBtn = document.getElementById('textModeBtn');
+        const playAudioCheckbox = document.getElementById('playAudioCheckbox');
+        const muteOnTextCheckbox = document.getElementById('muteOnTextCheckbox');
 
+        // =====================================================================
+        // Mode Management
+        // =====================================================================
+        function setMode(mode) {
+            currentMode = mode;
+
+            // Update UI
+            voiceModeBtn.classList.toggle('active', mode === 'voice');
+            textModeBtn.classList.toggle('active', mode === 'text');
+            voiceControls.style.display = mode === 'voice' ? 'flex' : 'none';
+            textControls.style.display = mode === 'text' ? 'block' : 'none';
+
+            // Handle auto-mute
+            if (muteOnTextCheckbox.checked) {
+                audioPlayer.setMuted(mode === 'text');
+                playAudioCheckbox.checked = mode !== 'text';
+            }
+
+            // Stop recording if switching to text mode
+            if (mode === 'text' && isRecording) {
+                stopRecording();
+            }
+
+            // Focus text input in text mode
+            if (mode === 'text' && !textInput.disabled) {
+                textInput.focus();
+            }
+        }
+
+        function toggleAudioPlayback() {
+            audioPlayer.setMuted(!playAudioCheckbox.checked);
+        }
+
+        // =====================================================================
+        // Status & Messages
+        // =====================================================================
         function setStatus(status, text) {
             statusDot.className = 'status-dot ' + status;
             statusText.textContent = text;
         }
 
-        function addMessage(role, text, isError = false) {
+        function addMessage(role, text, options = {}) {
+            const { isError = false, isStreaming = false, messageType = null } = options;
+
+            // If we're updating a streaming message, update it instead
+            if (isStreaming && streamingMessageElement) {
+                const textDiv = streamingMessageElement.querySelector('.message-text');
+                if (textDiv) {
+                    textDiv.textContent = text;
+                }
+                transcript.scrollTop = transcript.scrollHeight;
+                return streamingMessageElement;
+            }
+
             const div = document.createElement('div');
             div.className = 'message ' + (isError ? 'error' : role);
+            if (isStreaming) {
+                div.classList.add('streaming');
+            }
 
             if (role !== 'system') {
                 const roleDiv = document.createElement('div');
                 roleDiv.className = 'role';
                 roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+
+                if (messageType) {
+                    const typeSpan = document.createElement('span');
+                    typeSpan.className = 'message-type';
+                    typeSpan.textContent = `(${messageType})`;
+                    roleDiv.appendChild(typeSpan);
+                }
+
                 div.appendChild(roleDiv);
             }
 
             const textDiv = document.createElement('div');
-            textDiv.textContent = text;
+            textDiv.className = 'message-text';
+            if (isStreaming && !text) {
+                textDiv.innerHTML = '<span class="typing-indicator"><span>.</span><span>.</span><span>.</span></span>';
+            } else {
+                textDiv.textContent = text;
+            }
             div.appendChild(textDiv);
 
             transcript.appendChild(div);
             transcript.scrollTop = transcript.scrollHeight;
+
+            return div;
         }
 
+        function startStreamingMessage() {
+            streamingText = '';
+            streamingMessageElement = addMessage('assistant', '', { isStreaming: true });
+        }
+
+        function updateStreamingMessage(delta) {
+            streamingText += delta;
+            if (streamingMessageElement) {
+                const textDiv = streamingMessageElement.querySelector('.message-text');
+                if (textDiv) {
+                    textDiv.textContent = streamingText;
+                }
+                transcript.scrollTop = transcript.scrollHeight;
+            }
+        }
+
+        function finalizeStreamingMessage(finalText) {
+            if (streamingMessageElement) {
+                streamingMessageElement.classList.remove('streaming');
+                const textDiv = streamingMessageElement.querySelector('.message-text');
+                if (textDiv && finalText) {
+                    textDiv.textContent = finalText;
+                }
+            }
+            streamingMessageElement = null;
+            streamingText = '';
+        }
+
+        // =====================================================================
+        // WebSocket Connection
+        // =====================================================================
         function toggleConnection() {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.close();
@@ -403,6 +593,10 @@
                 sendBtn.disabled = false;
                 cancelBtn.disabled = false;
                 addMessage('system', 'Connected to server');
+
+                if (currentMode === 'text') {
+                    textInput.focus();
+                }
             };
 
             ws.onmessage = async (event) => {
@@ -410,37 +604,55 @@
 
                 switch (data.type) {
                     case 'audio':
-                        // Enqueue audio for gapless playback
                         const audioBytes = base64ToArrayBuffer(data.data);
                         audioPlayer.enqueue(audioBytes);
                         break;
 
                     case 'transcript_delta':
-                        // Real-time transcript update (could show typing indicator)
+                        // Start streaming message if not already
+                        if (!streamingMessageElement) {
+                            startStreamingMessage();
+                        }
+                        updateStreamingMessage(data.text);
                         break;
 
                     case 'transcript_done':
-                        addMessage(data.role, data.text);
+                        if (streamingMessageElement) {
+                            finalizeStreamingMessage(data.text);
+                        } else {
+                            // Message came without streaming deltas
+                            const msgType = data.role === 'user' ? 'voice' : null;
+                            addMessage(data.role, data.text, { messageType: msgType });
+                        }
                         break;
 
                     case 'status':
                         if (data.message === 'connected') {
                             addMessage('system', 'AI session ready');
+                        } else if (data.message === 'response_started') {
+                            // Could show typing indicator
+                        } else if (data.message === 'response_done') {
+                            // Finalize any streaming message
+                            if (streamingMessageElement) {
+                                finalizeStreamingMessage();
+                            }
                         }
                         break;
 
                     case 'error':
-                        addMessage('error', data.message, true);
+                        addMessage('error', data.message, { isError: true });
+                        if (streamingMessageElement) {
+                            finalizeStreamingMessage();
+                        }
                         break;
 
                     case 'vad':
                         if (data.event === 'speech_started') {
-                            // User started speaking - could show visual feedback
+                            // Visual feedback could be added here
                         }
                         break;
 
                     case 'clear_audio':
-                        // Server detected interruption - clear audio queue immediately
                         audioPlayer.clear();
                         console.log('Audio queue cleared due to interruption');
                         break;
@@ -456,14 +668,20 @@
                 cancelBtn.disabled = true;
                 addMessage('system', 'Disconnected from server');
                 stopRecording();
+                if (streamingMessageElement) {
+                    finalizeStreamingMessage();
+                }
             };
 
             ws.onerror = (error) => {
-                addMessage('error', 'Connection error', true);
+                addMessage('error', 'Connection error', { isError: true });
                 console.error('WebSocket error:', error);
             };
         }
 
+        // =====================================================================
+        // Voice Recording
+        // =====================================================================
         async function toggleRecording() {
             if (isRecording) {
                 stopRecording();
@@ -474,7 +692,6 @@
 
         async function startRecording() {
             try {
-                // Request microphone access
                 recordingStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
                         sampleRate: 24000,
@@ -485,12 +702,8 @@
                     }
                 });
 
-                // Create dedicated context for recording (separate from playback)
                 recordingContext = new AudioContext({ sampleRate: 24000 });
                 const source = recordingContext.createMediaStreamSource(recordingStream);
-
-                // Use ScriptProcessor for capturing audio
-                // Note: In production, consider using AudioWorklet for better performance
                 const processor = recordingContext.createScriptProcessor(4096, 1, 1);
 
                 source.connect(processor);
@@ -498,7 +711,6 @@
 
                 processor.onaudioprocess = (e) => {
                     if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
-
                     const inputData = e.inputBuffer.getChannelData(0);
                     const pcm16 = floatTo16BitPCM(inputData);
                     ws.send(pcm16);
@@ -511,7 +723,7 @@
                 addMessage('system', 'Recording started - speak now');
 
             } catch (error) {
-                addMessage('error', 'Microphone access denied: ' + error.message, true);
+                addMessage('error', 'Microphone access denied: ' + error.message, { isError: true });
                 console.error('Error accessing microphone:', error);
             }
         }
@@ -519,21 +731,55 @@
         function stopRecording() {
             isRecording = false;
 
-            // Stop all tracks in the stream
             if (recordingStream) {
                 recordingStream.getTracks().forEach(track => track.stop());
                 recordingStream = null;
             }
 
-            // Close recording context
             if (recordingContext && recordingContext.state !== 'closed') {
                 recordingContext.close();
                 recordingContext = null;
             }
 
-            setStatus('connected', 'Connected');
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                setStatus('connected', 'Connected');
+            }
             recordBtn.textContent = 'Start Recording';
             recordBtn.className = 'btn-success';
+        }
+
+        // =====================================================================
+        // Text Input
+        // =====================================================================
+        function sendText() {
+            const text = textInput.value.trim();
+            if (text && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'text', text: text }));
+                addMessage('user', text, { messageType: 'text' });
+                textInput.value = '';
+                textInput.focus();
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendText();
+            }
+        }
+
+        // =====================================================================
+        // Utilities
+        // =====================================================================
+        function cancelResponse() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'cancel' }));
+                audioPlayer.clear();
+                addMessage('system', 'Response cancelled');
+                if (streamingMessageElement) {
+                    finalizeStreamingMessage();
+                }
+            }
         }
 
         function floatTo16BitPCM(float32Array) {
@@ -555,34 +801,30 @@
             return bytes.buffer;
         }
 
-        function sendText() {
-            const text = textInput.value.trim();
-            if (text && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'text', text: text }));
-                addMessage('user', text);
-                textInput.value = '';
-            }
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendText();
-            }
-        }
-
-        function cancelResponse() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'cancel' }));
-                audioPlayer.clear(); // Clear pending audio
-                addMessage('system', 'Response cancelled');
-            }
-        }
-
         // Clean up on page unload
         window.addEventListener('beforeunload', () => {
             stopRecording();
             audioPlayer.close();
             if (ws) ws.close();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+1 for Voice mode, Ctrl+2 for Text mode
+            if (e.ctrlKey && e.key === '1') {
+                e.preventDefault();
+                setMode('voice');
+            } else if (e.ctrlKey && e.key === '2') {
+                e.preventDefault();
+                setMode('text');
+            }
+            // Space to toggle recording in voice mode (when not focused on input)
+            else if (e.code === 'Space' && currentMode === 'voice' &&
+                     document.activeElement !== textInput &&
+                     ws && ws.readyState === WebSocket.OPEN) {
+                e.preventDefault();
+                toggleRecording();
+            }
         });
     </script>
 </body>
