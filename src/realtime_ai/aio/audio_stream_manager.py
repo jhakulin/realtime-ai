@@ -1,19 +1,28 @@
 import asyncio
 import logging
-import base64
 from realtime_ai.models.audio_stream_options import AudioStreamOptions
-from realtime_ai.aio.realtime_ai_service_manager import RealtimeAIServiceManager
+from realtime_ai.providers.base_provider import BaseProvider
 
 logger = logging.getLogger(__name__)
 
 
 class AudioStreamManager:
     """
-    Manages streaming audio data to the Realtime API via the Service Manager.
+    Manages streaming audio data to Realtime AI providers.
+
+    This class provides buffering and streaming capabilities for audio data,
+    delegating the actual transmission to the provider implementation.
     """
-    def __init__(self, stream_options: AudioStreamOptions, service_manager: RealtimeAIServiceManager):
+    def __init__(self, stream_options: AudioStreamOptions, provider: BaseProvider):
+        """
+        Initialize AudioStreamManager.
+
+        Args:
+            stream_options: Audio stream configuration options
+            provider: Provider instance to send audio data to
+        """
         self._stream_options = stream_options
-        self._service_manager = service_manager
+        self._provider = provider
         self._audio_queue = asyncio.Queue()
         self._is_streaming = False
         self._stream_task = None
@@ -43,22 +52,16 @@ class AudioStreamManager:
         logger.info("Audio data enqueued for streaming.")
 
     async def _stream_audio(self):
+        """Stream audio chunks from queue to provider."""
         logger.info(f"Streaming audio task started, is_streaming: {self._is_streaming}")
         while self._is_streaming:
             try:
                 audio_chunk = await self._audio_queue.get()
                 processed_audio = self._process_audio(audio_chunk)
-                encoded_audio = base64.b64encode(processed_audio).decode()
 
-                # Send input_audio_buffer.append event
-                append_event = {
-                    "event_id": self._service_manager._generate_event_id(),
-                    "type": "input_audio_buffer.append",
-                    "audio": encoded_audio
-                }
-
-                await self._service_manager.send_event(append_event)
-                logger.info("input_audio_buffer.append event sent.")
+                # Send audio data to provider (provider handles encoding and event format)
+                await self._provider.send_audio(processed_audio)
+                logger.info("Audio data sent to provider.")
 
             except asyncio.CancelledError:
                 logger.info("Streaming audio task cancelled.")

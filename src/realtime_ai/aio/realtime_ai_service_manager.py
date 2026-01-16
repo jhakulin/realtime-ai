@@ -3,36 +3,38 @@ import json
 import logging
 import uuid
 from typing import Optional, Type
-from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
+
 from realtime_ai.aio.web_socket_manager import WebSocketManager
 from realtime_ai.models.realtime_ai_events import (
-    EventBase,
-    ErrorEvent,
-    ErrorDetails,
-    InputAudioBufferSpeechStopped,
-    InputAudioBufferCommitted,
     ConversationItemCreated,
     ConversationItemInputAudioTranscriptionCompleted,
-    ResponseCreated,
-    ResponseContentPartAdded,
-    ResponseAudioTranscriptDelta,
+    ConversationItemInputAudioTranscriptionDelta,
+    ErrorDetails,
+    ErrorEvent,
+    EventBase,
+    InputAudioBufferCleared,
+    InputAudioBufferCommitted,
+    InputAudioBufferSpeechStarted,
+    InputAudioBufferSpeechStopped,
     RateLimit,
     RateLimitsUpdated,
+    ReconnectedEvent,
     ResponseAudioDelta,
     ResponseAudioDone,
+    ResponseAudioTranscriptDelta,
     ResponseAudioTranscriptDone,
+    ResponseContentPartAdded,
     ResponseContentPartDone,
-    ResponseOutputItemDone,
+    ResponseCreated,
     ResponseDone,
-    SessionCreated,
-    SessionUpdated,
-    InputAudioBufferSpeechStarted,
-    ResponseOutputItemAdded,
     ResponseFunctionCallArgumentsDelta,
     ResponseFunctionCallArgumentsDone,
-    InputAudioBufferCleared,
-    ReconnectedEvent
+    ResponseOutputItemAdded,
+    ResponseOutputItemDone,
+    SessionCreated,
+    SessionUpdated,
 )
+from realtime_ai.models.realtime_ai_options import RealtimeAIOptions
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,9 @@ class RealtimeAIServiceManager:
         except asyncio.CancelledError:
             logger.info("RealtimeAIServiceManager: Connection was cancelled.")
         except Exception as e:
-            logger.error(f"RealtimeAIServiceManager: Unexpected error during connect: {e}")
+            logger.error(
+                f"RealtimeAIServiceManager: Unexpected error during connect: {e}"
+            )
 
     async def disconnect(self):
         try:
@@ -63,14 +67,18 @@ class RealtimeAIServiceManager:
         except asyncio.CancelledError:
             logger.info("RealtimeAIServiceManager: Disconnect was cancelled.")
         except Exception as e:
-            logger.error(f"RealtimeAIServiceManager: Unexpected error during disconnect: {e}")
+            logger.error(
+                f"RealtimeAIServiceManager: Unexpected error during disconnect: {e}"
+            )
 
     async def send_event(self, event: dict):
         try:
             await self._websocket_manager.send(event)
             logger.debug(f"RealtimeAIServiceManager: Sent event: {event.get('type')}")
         except Exception as e:
-            logger.error(f"RealtimeAIServiceManager: Failed to send event {event.get('type')}: {e}")
+            logger.error(
+                f"RealtimeAIServiceManager: Failed to send event {event.get('type')}: {e}"
+            )
 
     async def on_connected(self, reconnection: bool = False):
         self._is_connected = True
@@ -79,16 +87,20 @@ class RealtimeAIServiceManager:
         if reconnection:
             # If it's a reconnection, trigger a ReconnectedEvent
             reconnect_event = ReconnectedEvent(
-                event_id=self._generate_event_id(), 
+                event_id=self._generate_event_id(),
                 type="reconnect",
             )
-            await self.on_message_received(json.dumps(reconnect_event.__dict__))  # Sending ReconnectedEvent as JSON string
+            await self.on_message_received(
+                json.dumps(reconnect_event.__dict__)
+            )  # Sending ReconnectedEvent as JSON string
             logger.debug("RealtimeAIServiceManager: ReconnectedEvent sent.")
         logger.debug("RealtimeAIServiceManager: session.update event sent.")
 
     async def on_disconnected(self, status_code: int, reason: str):
         self._is_connected = False
-        logger.warning(f"RealtimeAIServiceManager: WebSocket disconnected: {status_code} - {reason}")
+        logger.warning(
+            f"RealtimeAIServiceManager: WebSocket disconnected: {status_code} - {reason}"
+        )
 
     async def on_error(self, error: Exception):
         logger.error(f"RealtimeAIServiceManager: WebSocket error: {error}")
@@ -96,6 +108,8 @@ class RealtimeAIServiceManager:
     async def on_message_received(self, message: str):
         try:
             json_object = json.loads(message)
+            event_type = json_object.get("type")
+            logger.debug(f"RealtimeAIServiceManager: Received event type: {event_type}")
             event = self.parse_realtime_event(json_object)
             if event:
                 await self._event_queue.put(event)
@@ -108,54 +122,66 @@ class RealtimeAIServiceManager:
         event_class = self._get_event_class(event_type)
         if event_class:
             try:
-                if event_type == "error" and 'error' in json_object:
+                if event_type == "error" and "error" in json_object:
                     # Convert error dict to ErrorDetails dataclass
-                    error_data = json_object['error']
+                    error_data = json_object["error"]
                     error_details = ErrorDetails(**error_data)
-                    return ErrorEvent(event_id=json_object['event_id'], type=event_type, error=error_details)
-                elif event_type == "rate_limits.updated" and 'rate_limits' in json_object:
-                    rate_limits_data = json_object['rate_limits']
+                    return ErrorEvent(
+                        event_id=json_object["event_id"],
+                        type=event_type,
+                        error=error_details,
+                    )
+                elif (
+                    event_type == "rate_limits.updated" and "rate_limits" in json_object
+                ):
+                    rate_limits_data = json_object["rate_limits"]
                     rate_limits = [RateLimit(**rate) for rate in rate_limits_data]
-                    return RateLimitsUpdated(event_id=json_object['event_id'], type=event_type, rate_limits=rate_limits)
+                    return RateLimitsUpdated(
+                        event_id=json_object["event_id"],
+                        type=event_type,
+                        rate_limits=rate_limits,
+                    )
                 elif event_type == "response.content_part.done":
                     # Ensure only relevant fields are passed
                     return ResponseContentPartDone(
-                        event_id=json_object['event_id'], 
+                        event_id=json_object["event_id"],
                         type=event_type,
-                        response_id=json_object.get('response_id'),
-                        item_id=json_object.get('item_id'),
-                        output_index=json_object.get('output_index'),
-                        content_index=json_object.get('content_index'),
-                        part=json_object.get('part')
+                        response_id=json_object.get("response_id"),
+                        item_id=json_object.get("item_id"),
+                        output_index=json_object.get("output_index"),
+                        content_index=json_object.get("content_index"),
+                        part=json_object.get("part"),
                     )
                 elif event_type == "response.content_part.added":
                     # Ensure only relevant fields are passed
                     return ResponseContentPartAdded(
-                        event_id=json_object['event_id'], 
+                        event_id=json_object["event_id"],
                         type=event_type,
-                        response_id=json_object.get('response_id'),
-                        item_id=json_object.get('item_id'),
-                        output_index=json_object.get('output_index'),
-                        content_index=json_object.get('content_index'),
-                        part=json_object.get('part')
+                        response_id=json_object.get("response_id"),
+                        item_id=json_object.get("item_id"),
+                        output_index=json_object.get("output_index"),
+                        content_index=json_object.get("content_index"),
+                        part=json_object.get("part"),
                     )
                 elif event_type == "response.function_call_arguments.done":
                     # Ensure only relevant fields are passed
                     return ResponseFunctionCallArgumentsDone(
-                        event_id=json_object['event_id'], 
+                        event_id=json_object["event_id"],
                         type=event_type,
-                        response_id=json_object.get('response_id'),
-                        item_id=json_object.get('item_id'),
-                        output_index=json_object.get('output_index'),
-                        call_id=json_object.get('call_id'),
-                        arguments=json_object.get('arguments')
+                        response_id=json_object.get("response_id"),
+                        item_id=json_object.get("item_id"),
+                        output_index=json_object.get("output_index"),
+                        call_id=json_object.get("call_id"),
+                        arguments=json_object.get("arguments"),
                     )
                 else:
-                        return event_class(**json_object)
+                    return event_class(**json_object)
             except TypeError as e:
                 logger.error(f"Error creating event object for {event_type}: {e}")
         else:
-            logger.warning(f"RealtimeAIServiceManager: Unknown message type received: {event_type}")
+            logger.warning(
+                f"RealtimeAIServiceManager: Unknown message type received: {event_type}"
+            )
         return None
 
     async def update_session(self, options: RealtimeAIOptions) -> dict:
@@ -175,8 +201,8 @@ class RealtimeAIServiceManager:
                 "tools": options.tools,
                 "tool_choice": options.tool_choice,
                 "temperature": options.temperature,
-                "max_response_output_tokens": options.max_output_tokens
-            }
+                "max_response_output_tokens": options.max_output_tokens,
+            },
         }
         await self.send_event(event)
 
@@ -200,6 +226,7 @@ class RealtimeAIServiceManager:
             "response.content_part.added": ResponseContentPartAdded,
             "response.audio.delta": ResponseAudioDelta,
             "response.audio_transcript.delta": ResponseAudioTranscriptDelta,
+            "conversation.item.input_audio_transcription.delta": ConversationItemInputAudioTranscriptionDelta,
             "conversation.item.input_audio_transcription.completed": ConversationItemInputAudioTranscriptionCompleted,
             "rate_limits.updated": RateLimitsUpdated,
             "response.audio.done": ResponseAudioDone,
@@ -214,7 +241,7 @@ class RealtimeAIServiceManager:
             "response.function_call_arguments.delta": ResponseFunctionCallArgumentsDelta,
             "response.function_call_arguments.done": ResponseFunctionCallArgumentsDone,
             "input_audio_buffer.cleared": InputAudioBufferCleared,
-            "reconnected": ReconnectedEvent
+            "reconnected": ReconnectedEvent,
         }
         return event_mapping.get(event_type)
 
@@ -227,7 +254,7 @@ class RealtimeAIServiceManager:
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
-    
+
     @property
     def options(self):
         return self._options

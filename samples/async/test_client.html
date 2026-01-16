@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Realtime AI - Server-Side Streaming Test Client</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        .status-dot.connected {
+            background: #4CAF50;
+        }
+        .status-dot.connecting {
+            background: #FF9800;
+            animation: pulse 1s infinite;
+        }
+        .status-dot.recording {
+            background: #f44336;
+            animation: pulse 0.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #1976D2;
+        }
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+        .btn-danger:hover:not(:disabled) {
+            background: #d32f2f;
+        }
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-success:hover:not(:disabled) {
+            background: #388E3C;
+        }
+        .btn-secondary {
+            background: #9e9e9e;
+            color: white;
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background: #757575;
+        }
+        .btn-secondary.active {
+            background: #673ab7;
+        }
+        .transcript {
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #fafafa;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        .message {
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 6px;
+            max-width: 85%;
+        }
+        .message.user {
+            background: #e3f2fd;
+            margin-left: auto;
+        }
+        .message.assistant {
+            background: #f5f5f5;
+            margin-right: auto;
+        }
+        .message.assistant.streaming {
+            background: #fff8e1;
+            border: 1px dashed #ffc107;
+        }
+        .message.system {
+            background: #fff3e0;
+            font-size: 0.9em;
+            color: #666;
+            max-width: 100%;
+        }
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+            max-width: 100%;
+        }
+        .role {
+            font-weight: bold;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+            color: #666;
+        }
+        .message-type {
+            font-size: 0.75em;
+            color: #999;
+            margin-left: 8px;
+        }
+        .text-input-container {
+            margin-top: 15px;
+        }
+        .text-input {
+            display: flex;
+            gap: 10px;
+        }
+        .text-input input {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        .text-input input:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        .info {
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .info code {
+            background: #c8e6c9;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .mode-toggle {
+            display: flex;
+            gap: 5px;
+            background: #eee;
+            padding: 4px;
+            border-radius: 8px;
+            margin-left: auto;
+        }
+        .mode-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .mode-btn.active {
+            background: white;
+            color: #333;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .mode-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.5);
+        }
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+        .audio-controls label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+        }
+        .voice-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .typing-indicator {
+            display: inline-block;
+        }
+        .typing-indicator span {
+            animation: typing 1s infinite;
+            display: inline-block;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        /* Image upload styles */
+        .image-upload-container {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .image-upload-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .image-upload-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .image-upload-btn input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        .image-preview-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .image-preview {
+            position: relative;
+            display: inline-block;
+        }
+        .image-preview img {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+        }
+        .image-preview .remove-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #f44336;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .image-preview .remove-btn:hover {
+            background: #d32f2f;
+        }
+        .message-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .message-image:hover {
+            transform: scale(1.02);
+        }
+        .image-status {
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+        .image-status.supported {
+            color: #4CAF50;
+        }
+        .image-status.unsupported {
+            color: #f44336;
+        }
+        /* Image modal for full-size view */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .image-modal.active {
+            display: flex;
+        }
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+        }
+        .image-modal .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Realtime AI Test Client</h1>
+    <p class="subtitle">Server-Side Streaming Demo - Voice & Text Communication</p>
+
+    <div class="card">
+        <div class="info">
+            <strong>Instructions:</strong><br>
+            1. Start the server: <code>python sample_server_side_streaming.py</code><br>
+            2. Click "Connect" to establish WebSocket connection<br>
+            3. Choose Voice or Text mode to communicate with the AI<br>
+            4. In Voice mode: Click "Start Recording" to speak<br>
+            5. In Text mode: Type your message and press Enter or click Send<br>
+            6. Upload images to share with the AI (OpenAI/Gemini only)
+        </div>
+
+        <div class="status">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
+
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="voiceModeBtn" onclick="setMode('voice')">Voice</button>
+                <button class="mode-btn" id="textModeBtn" onclick="setMode('text')">Text</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" class="btn-primary" onclick="toggleConnection()">Connect</button>
+            <button id="cancelBtn" class="btn-danger" onclick="cancelResponse()" disabled>Cancel</button>
+        </div>
+
+        <!-- Voice Mode Controls -->
+        <div class="voice-controls" id="voiceControls">
+            <button id="recordBtn" class="btn-success" onclick="toggleRecording()" disabled>Start Recording</button>
+        </div>
+
+        <!-- Text Mode Controls -->
+        <div class="text-input-container" id="textControls" style="display: none;">
+            <div class="text-input">
+                <input type="text" id="textInput" placeholder="Type your message here..." onkeypress="handleKeyPress(event)" disabled>
+                <button id="sendBtn" class="btn-primary" onclick="sendText()" disabled>Send</button>
+            </div>
+        </div>
+
+        <!-- Audio Options -->
+        <div class="audio-controls">
+            <label>
+                <input type="checkbox" id="playAudioCheckbox" checked onchange="toggleAudioPlayback()">
+                Play audio responses
+            </label>
+            <label>
+                <input type="checkbox" id="muteOnTextCheckbox">
+                Auto-mute in text mode
+            </label>
+        </div>
+
+        <!-- Image Upload -->
+        <div class="image-upload-container">
+            <div class="image-upload-row">
+                <button class="btn-secondary image-upload-btn" id="imageUploadBtn" disabled>
+                    Upload Image
+                    <input type="file" id="imageInput" accept="image/*" onchange="handleImageSelect(event)">
+                </button>
+                <button class="btn-primary" id="sendImageBtn" onclick="sendImage()" disabled style="display: none;">
+                    Send Image
+                </button>
+                <span class="image-status" id="imageStatus"></span>
+            </div>
+            <div class="image-preview-container" id="imagePreviewContainer"></div>
+        </div>
+    </div>
+
+    <!-- Image Modal for full-size view -->
+    <div class="image-modal" id="imageModal" onclick="closeImageModal()">
+        <span class="close-btn">&times;</span>
+        <img id="modalImage" src="" alt="Full size image">
+    </div>
+
+    <div class="card">
+        <h3 style="margin-bottom: 15px;">Conversation</h3>
+        <div class="transcript" id="transcript"></div>
+    </div>
+
+    <script>
+        // =====================================================================
+        // Gapless Audio Player
+        // =====================================================================
+        class GaplessAudioPlayer {
+            constructor(sampleRate = 24000) {
+                this.sampleRate = sampleRate;
+                this.audioContext = null;
+                this.nextScheduledTime = 0;
+                this.isPlaying = false;
+                this.audioQueue = [];
+                this.scheduledSources = [];
+                this.scheduleAheadTime = 0.1;
+                this.schedulerInterval = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.audioContext || this.audioContext.state === 'closed') {
+                    this.audioContext = new AudioContext({ sampleRate: this.sampleRate });
+                }
+                if (this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
+            }
+
+            setMuted(muted) {
+                this.muted = muted;
+                if (muted) {
+                    this.clear();
+                }
+            }
+
+            enqueue(pcm16ArrayBuffer) {
+                if (this.muted) return;
+
+                this.init();
+                const pcm16 = new Int16Array(pcm16ArrayBuffer);
+                const float32 = new Float32Array(pcm16.length);
+                for (let i = 0; i < pcm16.length; i++) {
+                    float32[i] = pcm16[i] / 32768.0;
+                }
+                this.audioQueue.push(float32);
+                if (!this.isPlaying) {
+                    this.startScheduler();
+                }
+            }
+
+            startScheduler() {
+                if (this.isPlaying) return;
+                this.isPlaying = true;
+                this.nextScheduledTime = this.audioContext.currentTime + 0.05;
+                this.schedulerInterval = setInterval(() => this.scheduleAudio(), 20);
+                this.scheduleAudio();
+            }
+
+            scheduleAudio() {
+                if (!this.audioContext || this.audioContext.state === 'closed') return;
+                const currentTime = this.audioContext.currentTime;
+
+                while (this.audioQueue.length > 0 &&
+                       this.nextScheduledTime < currentTime + this.scheduleAheadTime) {
+                    const float32Data = this.audioQueue.shift();
+                    const audioBuffer = this.audioContext.createBuffer(1, float32Data.length, this.sampleRate);
+                    audioBuffer.getChannelData(0).set(float32Data);
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(this.audioContext.destination);
+                    const startTime = Math.max(this.nextScheduledTime, currentTime);
+                    source.start(startTime);
+                    this.scheduledSources.push(source);
+                    const duration = float32Data.length / this.sampleRate;
+                    this.nextScheduledTime = startTime + duration;
+                }
+
+                this.scheduledSources = this.scheduledSources.filter(source => {
+                    try { return source.buffer !== null; } catch { return false; }
+                });
+
+                if (this.audioQueue.length === 0 && this.nextScheduledTime <= currentTime + 0.1) {
+                    this.stopScheduler();
+                }
+            }
+
+            stopScheduler() {
+                if (this.schedulerInterval) {
+                    clearInterval(this.schedulerInterval);
+                    this.schedulerInterval = null;
+                }
+                this.isPlaying = false;
+            }
+
+            clear() {
+                this.scheduledSources.forEach(source => {
+                    try { source.stop(); } catch (e) {}
+                });
+                this.scheduledSources = [];
+                this.audioQueue = [];
+                this.stopScheduler();
+                this.nextScheduledTime = 0;
+            }
+
+            close() {
+                this.clear();
+                if (this.audioContext && this.audioContext.state !== 'closed') {
+                    this.audioContext.close();
+                    this.audioContext = null;
+                }
+            }
+        }
+
+        // =====================================================================
+        // Main Application
+        // =====================================================================
+        let ws = null;
+        let recordingContext = null;
+        let recordingStream = null;
+        let isRecording = false;
+        let currentMode = 'voice';
+        let streamingMessageElement = null;
+        let streamingText = '';
+        let pendingImage = null;  // Store image data before sending
+
+        const audioPlayer = new GaplessAudioPlayer(24000);
+
+        // DOM Elements
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const connectBtn = document.getElementById('connectBtn');
+        const recordBtn = document.getElementById('recordBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const transcript = document.getElementById('transcript');
+        const voiceControls = document.getElementById('voiceControls');
+        const textControls = document.getElementById('textControls');
+        const voiceModeBtn = document.getElementById('voiceModeBtn');
+        const textModeBtn = document.getElementById('textModeBtn');
+        const playAudioCheckbox = document.getElementById('playAudioCheckbox');
+        const muteOnTextCheckbox = document.getElementById('muteOnTextCheckbox');
+        const imageInput = document.getElementById('imageInput');
+        const imageUploadBtn = document.getElementById('imageUploadBtn');
+        const sendImageBtn = document.getElementById('sendImageBtn');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const imageStatus = document.getElementById('imageStatus');
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+
+        // =====================================================================
+        // Mode Management
+        // =====================================================================
+        function setMode(mode) {
+            currentMode = mode;
+
+            // Update UI
+            voiceModeBtn.classList.toggle('active', mode === 'voice');
+            textModeBtn.classList.toggle('active', mode === 'text');
+            voiceControls.style.display = mode === 'voice' ? 'flex' : 'none';
+            textControls.style.display = mode === 'text' ? 'block' : 'none';
+
+            // Handle auto-mute
+            if (muteOnTextCheckbox.checked) {
+                audioPlayer.setMuted(mode === 'text');
+                playAudioCheckbox.checked = mode !== 'text';
+            }
+
+            // Stop recording if switching to text mode
+            if (mode === 'text' && isRecording) {
+                stopRecording();
+            }
+
+            // Focus text input in text mode
+            if (mode === 'text' && !textInput.disabled) {
+                textInput.focus();
+            }
+        }
+
+        function toggleAudioPlayback() {
+            audioPlayer.setMuted(!playAudioCheckbox.checked);
+        }
+
+        // =====================================================================
+        // Status & Messages
+        // =====================================================================
+        function setStatus(status, text) {
+            statusDot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+        }
+
+        function addMessage(role, text, options = {}) {
+            const { isError = false, isStreaming = false, messageType = null } = options;
+
+            // If we're updating a streaming message, update it instead
+            if (isStreaming && streamingMessageElement) {
+                const textDiv = streamingMessageElement.querySelector('.message-text');
+                if (textDiv) {
+                    textDiv.textContent = text;
+                }
+                transcript.scrollTop = transcript.scrollHeight;
+                return streamingMessageElement;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'message ' + (isError ? 'error' : role);
+            if (isStreaming) {
+                div.classList.add('streaming');
+            }
+
+            if (role !== 'system') {
+                const roleDiv = document.createElement('div');
+                roleDiv.className = 'role';
+                roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+
+                if (messageType) {
+                    const typeSpan = document.createElement('span');
+                    typeSpan.className = 'message-type';
+                    typeSpan.textContent = `(${messageType})`;
+                    roleDiv.appendChild(typeSpan);
+                }
+
+                div.appendChild(roleDiv);
+            }
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            if (isStreaming && !text) {
+                textDiv.innerHTML = '<span class="typing-indicator"><span>.</span><span>.</span><span>.</span></span>';
+            } else {
+                textDiv.textContent = text;
+            }
+            div.appendChild(textDiv);
+
+            transcript.appendChild(div);
+            transcript.scrollTop = transcript.scrollHeight;
+
+            return div;
+        }
+
+        function startStreamingMessage() {
+            streamingText = '';
+            streamingMessageElement = addMessage('assistant', '', { isStreaming: true });
+        }
+
+        function updateStreamingMessage(delta) {
+            streamingText += delta;
+            if (streamingMessageElement) {
+                const textDiv = streamingMessageElement.querySelector('.message-text');
+                if (textDiv) {
+                    textDiv.textContent = streamingText;
+                }
+                transcript.scrollTop = transcript.scrollHeight;
+            }
+        }
+
+        function finalizeStreamingMessage(finalText) {
+            if (streamingMessageElement) {
+                streamingMessageElement.classList.remove('streaming');
+                const textDiv = streamingMessageElement.querySelector('.message-text');
+                if (textDiv && finalText) {
+                    textDiv.textContent = finalText;
+                }
+            }
+            streamingMessageElement = null;
+            streamingText = '';
+        }
+
+        // =====================================================================
+        // WebSocket Connection
+        // =====================================================================
+        function toggleConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const url = 'ws://localhost:8765';
+            setStatus('connecting', 'Connecting...');
+            addMessage('system', 'Connecting to server...');
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                setStatus('connected', 'Connected');
+                connectBtn.textContent = 'Disconnect';
+                recordBtn.disabled = false;
+                textInput.disabled = false;
+                sendBtn.disabled = false;
+                cancelBtn.disabled = false;
+                imageUploadBtn.disabled = false;
+                addMessage('system', 'Connected to server');
+
+                if (currentMode === 'text') {
+                    textInput.focus();
+                }
+            };
+
+            ws.onmessage = async (event) => {
+                const data = JSON.parse(event.data);
+
+                switch (data.type) {
+                    case 'audio':
+                        const audioBytes = base64ToArrayBuffer(data.data);
+                        audioPlayer.enqueue(audioBytes);
+                        break;
+
+                    case 'transcript_delta':
+                        // Start streaming message if not already
+                        if (!streamingMessageElement) {
+                            startStreamingMessage();
+                        }
+                        updateStreamingMessage(data.text);
+                        break;
+
+                    case 'transcript_done':
+                        if (streamingMessageElement) {
+                            finalizeStreamingMessage(data.text);
+                        } else {
+                            // Message came without streaming deltas
+                            const msgType = data.role === 'user' ? 'voice' : null;
+                            addMessage(data.role, data.text, { messageType: msgType });
+                        }
+                        break;
+
+                    case 'status':
+                        if (data.message === 'connected') {
+                            addMessage('system', 'AI session ready');
+                        } else if (data.message === 'response_started') {
+                            // Could show typing indicator
+                        } else if (data.message === 'response_done') {
+                            // Finalize any streaming message
+                            if (streamingMessageElement) {
+                                finalizeStreamingMessage();
+                            }
+                        }
+                        break;
+
+                    case 'error':
+                        addMessage('error', data.message, { isError: true });
+                        if (streamingMessageElement) {
+                            finalizeStreamingMessage();
+                        }
+                        break;
+
+                    case 'vad':
+                        if (data.event === 'speech_started') {
+                            // Visual feedback could be added here
+                        }
+                        break;
+
+                    case 'clear_audio':
+                        audioPlayer.clear();
+                        console.log('Audio queue cleared due to interruption');
+                        break;
+
+                    case 'image_sent':
+                        // Image was successfully sent to AI
+                        imageStatus.textContent = 'Image sent to AI';
+                        imageStatus.className = 'image-status supported';
+                        setTimeout(() => { imageStatus.textContent = ''; }, 3000);
+                        break;
+
+                    case 'image_error':
+                        // Error sending image
+                        addMessage('error', 'Image error: ' + data.message, { isError: true });
+                        imageStatus.textContent = data.message;
+                        imageStatus.className = 'image-status unsupported';
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                setStatus('', 'Disconnected');
+                connectBtn.textContent = 'Connect';
+                recordBtn.disabled = true;
+                textInput.disabled = true;
+                sendBtn.disabled = true;
+                cancelBtn.disabled = true;
+                imageUploadBtn.disabled = true;
+                sendImageBtn.disabled = true;
+                addMessage('system', 'Disconnected from server');
+                stopRecording();
+                clearPendingImage();
+                if (streamingMessageElement) {
+                    finalizeStreamingMessage();
+                }
+            };
+
+            ws.onerror = (error) => {
+                addMessage('error', 'Connection error', { isError: true });
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // =====================================================================
+        // Voice Recording
+        // =====================================================================
+        async function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
+        async function startRecording() {
+            try {
+                recordingStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 24000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                recordingContext = new AudioContext({ sampleRate: 24000 });
+                const source = recordingContext.createMediaStreamSource(recordingStream);
+                const processor = recordingContext.createScriptProcessor(4096, 1, 1);
+
+                source.connect(processor);
+                processor.connect(recordingContext.destination);
+
+                processor.onaudioprocess = (e) => {
+                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const pcm16 = floatTo16BitPCM(inputData);
+                    ws.send(pcm16);
+                };
+
+                isRecording = true;
+                setStatus('recording', 'Recording...');
+                recordBtn.textContent = 'Stop Recording';
+                recordBtn.className = 'btn-danger';
+                addMessage('system', 'Recording started - speak now');
+
+            } catch (error) {
+                addMessage('error', 'Microphone access denied: ' + error.message, { isError: true });
+                console.error('Error accessing microphone:', error);
+            }
+        }
+
+        function stopRecording() {
+            isRecording = false;
+
+            if (recordingStream) {
+                recordingStream.getTracks().forEach(track => track.stop());
+                recordingStream = null;
+            }
+
+            if (recordingContext && recordingContext.state !== 'closed') {
+                recordingContext.close();
+                recordingContext = null;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                setStatus('connected', 'Connected');
+            }
+            recordBtn.textContent = 'Start Recording';
+            recordBtn.className = 'btn-success';
+        }
+
+        // =====================================================================
+        // Text Input
+        // =====================================================================
+        function sendText() {
+            const text = textInput.value.trim();
+            if (text && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'text', text: text }));
+                addMessage('user', text, { messageType: 'text' });
+                textInput.value = '';
+                textInput.focus();
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendText();
+            }
+        }
+
+        // =====================================================================
+        // Image Handling
+        // =====================================================================
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                addMessage('error', 'Please select an image file', { isError: true });
+                return;
+            }
+
+            // Validate file size (max 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                addMessage('error', 'Image too large. Maximum size is 10MB.', { isError: true });
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target.result;
+                const base64 = dataUrl.split(',')[1];
+                const format = file.type.split('/')[1];  // png, jpeg, etc.
+
+                pendingImage = {
+                    data: base64,
+                    format: format,
+                    dataUrl: dataUrl,
+                    name: file.name
+                };
+
+                showImagePreview(dataUrl, file.name);
+                sendImageBtn.style.display = 'inline-block';
+                sendImageBtn.disabled = false;
+                imageStatus.textContent = `Ready to send: ${file.name}`;
+                imageStatus.className = 'image-status';
+            };
+
+            reader.onerror = () => {
+                addMessage('error', 'Error reading image file', { isError: true });
+            };
+
+            reader.readAsDataURL(file);
+
+            // Reset file input so same file can be selected again
+            event.target.value = '';
+        }
+
+        function showImagePreview(dataUrl, fileName) {
+            imagePreviewContainer.innerHTML = '';
+
+            const preview = document.createElement('div');
+            preview.className = 'image-preview';
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.alt = fileName;
+            img.title = 'Click to view full size';
+            img.onclick = () => openImageModal(dataUrl);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.innerHTML = '×';
+            removeBtn.title = 'Remove image';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                clearPendingImage();
+            };
+
+            preview.appendChild(img);
+            preview.appendChild(removeBtn);
+            imagePreviewContainer.appendChild(preview);
+        }
+
+        function clearPendingImage() {
+            pendingImage = null;
+            imagePreviewContainer.innerHTML = '';
+            sendImageBtn.style.display = 'none';
+            sendImageBtn.disabled = true;
+            imageStatus.textContent = '';
+        }
+
+        function sendImage() {
+            if (!pendingImage || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+            // Send image to server
+            ws.send(JSON.stringify({
+                type: 'image',
+                data: pendingImage.data,
+                format: pendingImage.format
+            }));
+
+            // Add image message to conversation
+            addImageMessage('user', pendingImage.dataUrl, pendingImage.name);
+
+            // Clear preview
+            clearPendingImage();
+        }
+
+        function addImageMessage(role, dataUrl, fileName) {
+            const div = document.createElement('div');
+            div.className = 'message ' + role;
+
+            const roleDiv = document.createElement('div');
+            roleDiv.className = 'role';
+            roleDiv.textContent = role === 'user' ? 'You' : 'Assistant';
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = 'message-type';
+            typeSpan.textContent = '(image)';
+            roleDiv.appendChild(typeSpan);
+            div.appendChild(roleDiv);
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.textContent = `Sent image: ${fileName}`;
+            div.appendChild(textDiv);
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.className = 'message-image';
+            img.alt = fileName;
+            img.title = 'Click to view full size';
+            img.onclick = () => openImageModal(dataUrl);
+            div.appendChild(img);
+
+            transcript.appendChild(div);
+            transcript.scrollTop = transcript.scrollHeight;
+        }
+
+        function openImageModal(dataUrl) {
+            modalImage.src = dataUrl;
+            imageModal.classList.add('active');
+        }
+
+        function closeImageModal() {
+            imageModal.classList.remove('active');
+            modalImage.src = '';
+        }
+
+        // =====================================================================
+        // Utilities
+        // =====================================================================
+        function cancelResponse() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'cancel' }));
+                audioPlayer.clear();
+                addMessage('system', 'Response cancelled');
+                if (streamingMessageElement) {
+                    finalizeStreamingMessage();
+                }
+            }
+        }
+
+        function floatTo16BitPCM(float32Array) {
+            const buffer = new ArrayBuffer(float32Array.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < float32Array.length; i++) {
+                let s = Math.max(-1, Math.min(1, float32Array[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return buffer;
+        }
+
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            stopRecording();
+            audioPlayer.close();
+            if (ws) ws.close();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+1 for Voice mode, Ctrl+2 for Text mode
+            if (e.ctrlKey && e.key === '1') {
+                e.preventDefault();
+                setMode('voice');
+            } else if (e.ctrlKey && e.key === '2') {
+                e.preventDefault();
+                setMode('text');
+            }
+            // Space to toggle recording in voice mode (when not focused on input)
+            else if (e.code === 'Space' && currentMode === 'voice' &&
+                     document.activeElement !== textInput &&
+                     ws && ws.readyState === WebSocket.OPEN) {
+                e.preventDefault();
+                toggleRecording();
+            }
+        });
+    </script>
+</body>
+</html>

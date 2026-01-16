@@ -6,4 +6,5 @@ websocket-client
 azure-cognitiveservices-speech
 scipy
 onnxruntime
+openai
 resampy
