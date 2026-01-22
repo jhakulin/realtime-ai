@@ -29,8 +29,10 @@ class WebSocketManager:
             self._url = f"{self._options.url}?model={self._options.model}"
             self._headers = {
                 "Authorization": f"Bearer {self._options.api_key}",
-                "openai-beta": "realtime=v1",
             }
+            # Only include openai-beta header for OpenAI endpoints
+            if "api.openai.com" in self._options.url:
+                self._headers["openai-beta"] = "realtime=v1"
 
         self._ws = None
         self._receive_thread = None

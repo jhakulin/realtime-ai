@@ -27,6 +27,7 @@ class EventType(Enum):
     SPEECH_STOPPED = "speech.stopped"
 
     # Transcription Events
+    INPUT_TRANSCRIPT_DELTA = "input.transcript.delta"
     INPUT_TRANSCRIPT_COMPLETED = "input.transcript.completed"
     TRANSCRIPT_DELTA = "transcript.delta"
     TRANSCRIPT_DONE = "transcript.done"
@@ -34,6 +35,7 @@ class EventType(Enum):
     # Response Events
     RESPONSE_CREATED = "response.created"
     RESPONSE_CONTENT_PART_ADDED = "response.content_part.added"
+    RESPONSE_CONTENT_PART_DONE = "response.content_part.done"
     RESPONSE_OUTPUT_ITEM_ADDED = "response.output_item.added"
     RESPONSE_OUTPUT_ITEM_DONE = "response.output_item.done"
     RESPONSE_DONE = "response.done"
@@ -148,6 +150,14 @@ class SpeechStoppedEvent(NormalizedEvent):
 # ============================================================================
 
 @dataclass
+class InputTranscriptDeltaEvent(NormalizedEvent):
+    """Streaming input audio transcription chunk."""
+    item_id: str = ""
+    content_index: int = 0
+    delta: str = ""
+
+
+@dataclass
 class InputTranscriptCompletedEvent(NormalizedEvent):
     """Input audio transcription completed."""
     item_id: str = ""
@@ -189,6 +199,16 @@ class ResponseCreatedEvent(NormalizedEvent):
 @dataclass
 class ResponseContentPartAddedEvent(NormalizedEvent):
     """Content part added to response."""
+    response_id: str = ""
+    item_id: str = ""
+    output_index: int = 0
+    content_index: int = 0
+    part: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ResponseContentPartDoneEvent(NormalizedEvent):
+    """Content part completed."""
     response_id: str = ""
     item_id: str = ""
     output_index: int = 0

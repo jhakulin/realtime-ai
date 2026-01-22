@@ -24,7 +24,7 @@ Architecture:
                                   Local VAD (Silero ONNX)
 
 To run:
-    1. Set OPENAI_API_KEY environment variable
+    1. Set OPENAI_API_KEY (for OpenAI) or XAI_API_KEY (for Grok) environment variable
     2. python sample_server_side_streaming.py
     3. Connect a WebSocket client to ws://localhost:8765
 
@@ -223,12 +223,13 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
     All audio is forwarded to/from the connected WebSocket client.
     """
 
-    def __init__(self, client_websocket: WebSocketServerProtocol):
+    def __init__(self, client_websocket: WebSocketServerProtocol, use_local_vad: bool = False):
         super().__init__()
         self._client_ws = client_websocket
         self._ai_client: Optional[RealtimeAIClient] = None
         self._is_responding = False
         self._vad_processor: Optional[LocalVADProcessor] = None
+        self._use_local_vad = use_local_vad
 
     def set_ai_client(self, client: RealtimeAIClient):
         """Set the AI client reference for response control."""
@@ -258,16 +259,12 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
         # Always clear client audio queue when user starts speaking
         # This handles the case where audio is still playing from buffer
         # even after the server response has "completed"
-        await self._send_to_client({
-            "type": "clear_audio"
-        })
+        await self._send_to_client({"type": "clear_audio"})
         logger.info("Sent clear_audio to client")
 
-        await self._send_to_client({
-            "type": "vad",
-            "event": "speech_started",
-            "source": "local"
-        })
+        await self._send_to_client(
+            {"type": "vad", "event": "speech_started", "source": "local"}
+        )
 
         # Cancel ongoing response if still generating
         if self._is_responding and self._ai_client:
@@ -278,11 +275,9 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
 
     async def on_local_speech_end(self):
         """Called when local VAD detects speech end."""
-        await self._send_to_client({
-            "type": "vad",
-            "event": "speech_stopped",
-            "source": "local"
-        })
+        await self._send_to_client(
+            {"type": "vad", "event": "speech_stopped", "source": "local"}
+        )
 
         # Trigger response generation
         if self._ai_client:
@@ -297,21 +292,25 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
         """Forward audio chunks to the client."""
         self._is_responding = True
         if event.delta:
-            await self._send_to_client({
-                "type": "audio",
-                "data": event.delta,
-                "item_id": event.item_id,
-                "content_index": event.content_index
-            })
+            await self._send_to_client(
+                {
+                    "type": "audio",
+                    "data": event.delta,
+                    "item_id": event.item_id,
+                    "content_index": event.content_index,
+                }
+            )
             logger.debug(f"Forwarded audio chunk for item {event.item_id}")
 
     async def on_response_audio_done(self, event: ResponseAudioDone) -> None:
         """Notify client that audio stream for this response is complete."""
-        await self._send_to_client({
-            "type": "audio_done",
-            "item_id": event.item_id,
-            "content_index": event.content_index
-        })
+        await self._send_to_client(
+            {
+                "type": "audio_done",
+                "item_id": event.item_id,
+                "content_index": event.content_index,
+            }
+        )
         logger.debug(f"Audio done for item {event.item_id}")
 
     # =========================================================================
@@ -323,23 +322,27 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
     ) -> None:
         """Forward assistant's speech transcript to client in real-time."""
         if event.delta:
-            await self._send_to_client({
-                "type": "transcript_delta",
-                "role": "assistant",
-                "text": event.delta,
-                "response_id": event.response_id
-            })
+            await self._send_to_client(
+                {
+                    "type": "transcript_delta",
+                    "role": "assistant",
+                    "text": event.delta,
+                    "response_id": event.response_id,
+                }
+            )
 
     async def on_response_audio_transcript_done(
         self, event: ResponseAudioTranscriptDone
     ) -> None:
         """Send complete assistant transcript to client."""
         if event.transcript:
-            await self._send_to_client({
-                "type": "transcript_done",
-                "role": "assistant",
-                "text": event.transcript
-            })
+            await self._send_to_client(
+                {
+                    "type": "transcript_done",
+                    "role": "assistant",
+                    "text": event.transcript,
+                }
+            )
             logger.info(f"Assistant: {event.transcript}")
 
     async def on_conversation_item_input_audio_transcription_completed(
@@ -347,11 +350,9 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
     ) -> None:
         """Send user's speech transcript to client."""
         if event.transcript:
-            await self._send_to_client({
-                "type": "transcript_done",
-                "role": "user",
-                "text": event.transcript
-            })
+            await self._send_to_client(
+                {"type": "transcript_done", "role": "user", "text": event.transcript}
+            )
             logger.info(f"User: {event.transcript}")
 
     # =========================================================================
@@ -360,19 +361,14 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
 
     async def on_session_created(self, event: SessionCreated) -> None:
         """Notify client that AI session is ready."""
-        await self._send_to_client({
-            "type": "status",
-            "message": "connected",
-            "session": event.session
-        })
+        await self._send_to_client(
+            {"type": "status", "message": "connected", "session": event.session}
+        )
         logger.info("AI session created")
 
     async def on_session_updated(self, event: SessionUpdated) -> None:
         """Notify client of session configuration changes."""
-        await self._send_to_client({
-            "type": "status",
-            "message": "session_updated"
-        })
+        await self._send_to_client({"type": "status", "message": "session_updated"})
         logger.debug("AI session updated")
 
     # =========================================================================
@@ -383,20 +379,29 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
         self, event: InputAudioBufferSpeechStarted
     ) -> None:
         """Handle server-side VAD speech start (if enabled)."""
-        logger.info(f"Server VAD: Speech started at {event.audio_start_ms}ms - is_responding: {self._is_responding}")
+        # Skip server VAD when using local VAD to avoid conflicts/spurious triggers
+        if self._use_local_vad:
+            logger.debug(
+                f"Server VAD: Ignoring speech_started (using local VAD) at {event.audio_start_ms}ms"
+            )
+            return
+
+        logger.info(
+            f"Server VAD: Speech started at {event.audio_start_ms}ms - is_responding: {self._is_responding}"
+        )
 
         # Always clear client audio queue when user starts speaking
-        await self._send_to_client({
-            "type": "clear_audio"
-        })
+        await self._send_to_client({"type": "clear_audio"})
         logger.info("Sent clear_audio to client")
 
-        await self._send_to_client({
-            "type": "vad",
-            "event": "speech_started",
-            "source": "server",
-            "audio_start_ms": event.audio_start_ms
-        })
+        await self._send_to_client(
+            {
+                "type": "vad",
+                "event": "speech_started",
+                "source": "server",
+                "audio_start_ms": event.audio_start_ms,
+            }
+        )
 
         # Cancel ongoing response if still generating
         if self._is_responding and self._ai_client:
@@ -409,12 +414,21 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
         self, event: InputAudioBufferSpeechStopped
     ) -> None:
         """Handle server-side VAD speech stop (if enabled)."""
-        await self._send_to_client({
-            "type": "vad",
-            "event": "speech_stopped",
-            "source": "server",
-            "audio_end_ms": event.audio_end_ms
-        })
+        # Skip server VAD when using local VAD
+        if self._use_local_vad:
+            logger.debug(
+                f"Server VAD: Ignoring speech_stopped (using local VAD) at {event.audio_end_ms}ms"
+            )
+            return
+
+        await self._send_to_client(
+            {
+                "type": "vad",
+                "event": "speech_stopped",
+                "source": "server",
+                "audio_end_ms": event.audio_end_ms,
+            }
+        )
         logger.info(f"Server VAD: Speech stopped at {event.audio_end_ms}ms")
 
     async def on_input_audio_buffer_committed(
@@ -430,21 +444,16 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
     async def on_response_created(self, event: ResponseCreated) -> None:
         """AI started generating a response."""
         self._is_responding = True
-        await self._send_to_client({
-            "type": "status",
-            "message": "response_started"
-        })
+        await self._send_to_client({"type": "status", "message": "response_started"})
         logger.debug("Response generation started")
 
     async def on_response_done(self, event: ResponseDone) -> None:
         """AI finished generating response."""
         self._is_responding = False
         status = event.response.get("status", "completed")
-        await self._send_to_client({
-            "type": "status",
-            "message": "response_done",
-            "status": status
-        })
+        await self._send_to_client(
+            {"type": "status", "message": "response_done", "status": status}
+        )
         logger.debug(f"Response completed with status: {status}")
 
     async def on_response_content_part_added(
@@ -465,9 +474,7 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
         """Output item added to response."""
         logger.debug(f"Output item added: {event.item}")
 
-    async def on_response_output_item_done(
-        self, event: ResponseOutputItemDone
-    ) -> None:
+    async def on_response_output_item_done(self, event: ResponseOutputItemDone) -> None:
         """Output item completed."""
         logger.debug(f"Output item done: {event.item}")
 
@@ -487,11 +494,10 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
 
     async def on_error(self, event: ErrorEvent) -> None:
         """Forward errors to client."""
-        error_msg = event.error.message if hasattr(event.error, 'message') else str(event.error)
-        await self._send_to_client({
-            "type": "error",
-            "message": error_msg
-        })
+        error_msg = (
+            event.error.message if hasattr(event.error, "message") else str(event.error)
+        )
+        await self._send_to_client({"type": "error", "message": error_msg})
         logger.error(f"AI Error: {error_msg}")
 
     # =========================================================================
@@ -502,7 +508,11 @@ class ServerSideEventHandler(RealtimeAIEventHandler):
         """Log rate limit updates."""
         for rate in event.rate_limits:
             name = rate.name if hasattr(rate, "name") else rate.get("name", "unknown")
-            remaining = rate.remaining if hasattr(rate, "remaining") else rate.get("remaining", 0)
+            remaining = (
+                rate.remaining
+                if hasattr(rate, "remaining")
+                else rate.get("remaining", 0)
+            )
             logger.debug(f"Rate limit - {name}: {remaining} remaining")
 
     # =========================================================================
@@ -546,25 +556,34 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
     vad_processor = None
 
     try:
-        # Get API key from environment
-        api_key = os.getenv("OPENAI_API_KEY")
+        # Get API key from environment - check both OpenAI and Grok
+        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("XAI_API_KEY")
+        provider = "openai" if os.getenv("OPENAI_API_KEY") else "grok"
+
         if not api_key:
-            await websocket.send(json.dumps({
-                "type": "error",
-                "message": "Server not configured: OPENAI_API_KEY not set"
-            }))
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "Server not configured: OPENAI_API_KEY or XAI_API_KEY not set",
+                    }
+                )
+            )
             return
 
         # Create event handler for this client connection
-        handler = ServerSideEventHandler(websocket)
+        handler = ServerSideEventHandler(websocket, use_local_vad=USE_LOCAL_VAD)
 
         # Configure AI options
         # When using local VAD, disable server-side VAD (turn_detection=None)
         # Note: Use "gpt-realtime" for image/vision support
         #       Use "gpt-4o-realtime-preview" for audio/text only (no image support)
+        # For Grok Voice Agent API, use "grok-3" (or "grok-2-public" for older)
+        model = "gpt-realtime" if provider == "openai" else "grok-3"
+
         options = RealtimeAIOptions(
             api_key=api_key,
-            model="gpt-realtime",
+            model=model,
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Keep responses concise.",
             voice="alloy",
@@ -576,18 +595,20 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
                 "threshold": 0.5,
                 "prefix_padding_ms": 300,
                 "silence_duration_ms": 500,
-            } if not USE_LOCAL_VAD else None,
+            }
+            if not USE_LOCAL_VAD
+            else None,
         )
 
         # Audio stream configuration (24kHz, 16-bit mono)
         stream_options = AudioStreamOptions(
-            sample_rate=24000,
-            channels=1,
-            bytes_per_sample=2
+            sample_rate=24000, channels=1, bytes_per_sample=2
         )
 
-        # Create AI client
-        ai_client = RealtimeAIClient(options, stream_options, handler)
+        # Create AI client with the detected provider
+        ai_client = RealtimeAIClient(
+            options, stream_options, handler, provider=provider
+        )
         handler.set_ai_client(ai_client)
 
         # Set up local VAD if enabled
@@ -646,24 +667,37 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
                         if image_data:
                             try:
                                 image_bytes = base64.b64decode(image_data)
-                                await ai_client.send_image(image_bytes, image_format=image_format)
-                                logger.info(f"Sent image to AI ({len(image_bytes)} bytes, format={image_format})")
-                                await websocket.send(json.dumps({
-                                    "type": "image_sent",
-                                    "message": "Image sent to AI"
-                                }))
+                                await ai_client.send_image(
+                                    image_bytes, image_format=image_format
+                                )
+                                logger.info(
+                                    f"Sent image to AI ({len(image_bytes)} bytes, format={image_format})"
+                                )
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "image_sent",
+                                            "message": "Image sent to AI",
+                                        }
+                                    )
+                                )
                             except NotImplementedError as e:
                                 logger.warning(f"Image not supported by provider: {e}")
-                                await websocket.send(json.dumps({
-                                    "type": "image_error",
-                                    "message": f"Provider does not support images: {PROVIDER}"
-                                }))
+                                await websocket.send(
+                                    json.dumps(
+                                        {
+                                            "type": "image_error",
+                                            "message": f"Provider does not support images: {PROVIDER}",
+                                        }
+                                    )
+                                )
                             except Exception as e:
                                 logger.error(f"Error sending image: {e}")
-                                await websocket.send(json.dumps({
-                                    "type": "image_error",
-                                    "message": str(e)
-                                }))
+                                await websocket.send(
+                                    json.dumps(
+                                        {"type": "image_error", "message": str(e)}
+                                    )
+                                )
 
                     elif msg_type == "generate":
                         # Explicit request to generate response
@@ -737,18 +771,24 @@ async def main():
     logger.info("")
     logger.info("Client Protocol:")
     logger.info("  - Send raw PCM16 audio as binary WebSocket messages")
-    logger.info("  - Or send JSON: {\"type\": \"audio\", \"data\": \"<base64>\"}")
-    logger.info("  - Or send JSON: {\"type\": \"text\", \"text\": \"hello\"}")
-    logger.info("  - Or send JSON: {\"type\": \"image\", \"data\": \"<base64>\", \"format\": \"png\"}")
+    logger.info('  - Or send JSON: {"type": "audio", "data": "<base64>"}')
+    logger.info('  - Or send JSON: {"type": "text", "text": "hello"}')
+    logger.info(
+        '  - Or send JSON: {"type": "image", "data": "<base64>", "format": "png"}'
+    )
     logger.info("")
     logger.info("Press Ctrl+C to stop the server")
     logger.info("=" * 60)
 
     # Check for API key
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("OPENAI_API_KEY") and not os.getenv("XAI_API_KEY"):
         logger.error("")
-        logger.error("ERROR: OPENAI_API_KEY environment variable not set!")
-        logger.error("Please set it before running: export OPENAI_API_KEY=your-key")
+        logger.error(
+            "ERROR: OPENAI_API_KEY or XAI_API_KEY environment variable not set!"
+        )
+        logger.error("Please set one before running:")
+        logger.error("  For OpenAI: export OPENAI_API_KEY=your-key")
+        logger.error("  For Grok: export XAI_API_KEY=your-key")
         logger.error("")
         return
 

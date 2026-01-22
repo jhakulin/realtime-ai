@@ -68,10 +68,9 @@ class GrokProvider(BaseProvider):
 
         Overrides the endpoint to use xAI's API.
         """
-        # Create a copy of options with Grok endpoint
-        # Note: RealtimeAIServiceManager will need to support custom endpoints
-        # For now, we'll create new options with adjusted configuration
-        return options  # TODO: Add endpoint override when supported
+        # Create a new options instance with Grok endpoint
+        from dataclasses import replace
+        return replace(options, url="wss://api.x.ai/v1/realtime")
 
     @property
     def provider_name(self) -> str:
@@ -289,8 +288,9 @@ class GrokProvider(BaseProvider):
         """
         Converts Grok event to normalized format.
 
-        Since Grok is OpenAI-compatible, event normalization is identical
-        to OpenAI provider. Event types and structure match OpenAI exactly.
+        Grok uses slightly different event type names than OpenAI:
+        - response.output_audio.delta vs response.audio.delta
+        - response.output_audio_transcript.delta vs response.audio_transcript.delta
 
         Args:
             raw_event: Raw Grok event dictionary
@@ -300,6 +300,15 @@ class GrokProvider(BaseProvider):
         """
         event_type = raw_event.get("type")
         event_id = raw_event.get("event_id", "")
+
+        # Normalize Grok event types to OpenAI equivalents for matching
+        event_type_aliases = {
+            "response.output_audio.delta": "response.audio.delta",
+            "response.output_audio.done": "response.audio.done",
+            "response.output_audio_transcript.delta": "response.audio_transcript.delta",
+            "response.output_audio_transcript.done": "response.audio_transcript.done",
+        }
+        event_type = event_type_aliases.get(event_type, event_type)
         timestamp = time.time()
 
         # Session events

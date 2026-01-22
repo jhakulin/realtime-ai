@@ -21,10 +21,12 @@ from realtime_ai.models.normalized_events import (
     EventType,
     FunctionCallEvent,
     InputTranscriptCompletedEvent,
+    InputTranscriptDeltaEvent,
     NormalizedEvent,
     RateLimit,
     RateLimitsUpdatedEvent,
     ResponseContentPartAddedEvent,
+    ResponseContentPartDoneEvent,
     ResponseCreatedEvent,
     ResponseDoneEvent,
     ResponseOutputItemAddedEvent,
@@ -458,6 +460,20 @@ class OpenAIProvider(BaseProvider):
             ]
 
         # Transcription Events
+        elif event_type == "conversation.item.input_audio_transcription.delta":
+            return [
+                InputTranscriptDeltaEvent(
+                    event_id=event_id,
+                    event_type=EventType.INPUT_TRANSCRIPT_DELTA,
+                    timestamp=timestamp,
+                    provider="openai",
+                    raw_event=raw_event,
+                    item_id=raw_event.get("item_id", ""),
+                    content_index=raw_event.get("content_index", 0),
+                    delta=raw_event.get("delta", ""),
+                )
+            ]
+
         elif event_type == "conversation.item.input_audio_transcription.completed":
             return [
                 InputTranscriptCompletedEvent(
@@ -523,6 +539,22 @@ class OpenAIProvider(BaseProvider):
                 ResponseContentPartAddedEvent(
                     event_id=event_id,
                     event_type=EventType.RESPONSE_CONTENT_PART_ADDED,
+                    timestamp=timestamp,
+                    provider="openai",
+                    raw_event=raw_event,
+                    response_id=raw_event.get("response_id", ""),
+                    item_id=raw_event.get("item_id", ""),
+                    output_index=raw_event.get("output_index", 0),
+                    content_index=raw_event.get("content_index", 0),
+                    part=raw_event.get("part", {}),
+                )
+            ]
+
+        elif event_type == "response.content_part.done":
+            return [
+                ResponseContentPartDoneEvent(
+                    event_id=event_id,
+                    event_type=EventType.RESPONSE_CONTENT_PART_DONE,
                     timestamp=timestamp,
                     provider="openai",
                     raw_event=raw_event,

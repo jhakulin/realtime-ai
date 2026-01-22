@@ -106,6 +106,13 @@ class RealtimeAIServiceManager:
 
     def parse_realtime_event(self, json_object: dict) -> Optional[EventBase]:
         event_type = json_object.get("type")
+
+        # Skip known ignorable events (ping, conversation.created are Grok keepalive/info events)
+        ignorable_events = {"ping", "conversation.created"}
+        if event_type in ignorable_events:
+            logger.debug(f"RealtimeAIServiceManager: Ignoring event type: {event_type}")
+            return None
+
         event_class = self._get_event_class(event_type)
         if event_class:
             try:
@@ -143,7 +150,7 @@ class RealtimeAIServiceManager:
                 elif event_type == "response.function_call_arguments.done":
                     # Ensure only relevant fields are passed
                     return ResponseFunctionCallArgumentsDone(
-                        event_id=json_object['event_id'], 
+                        event_id=json_object['event_id'],
                         type=event_type,
                         response_id=json_object.get('response_id'),
                         item_id=json_object.get('item_id'),
@@ -151,8 +158,32 @@ class RealtimeAIServiceManager:
                         call_id=json_object.get('call_id'),
                         arguments=json_object.get('arguments')
                     )
+                elif event_type == "response.done":
+                    # Handle both OpenAI (response dict) and Grok (response_id) formats
+                    response = json_object.get("response", {})
+                    if not response and "response_id" in json_object:
+                        # Grok format: construct response dict from response_id
+                        response = {"id": json_object.get("response_id"), "status": json_object.get("status", "completed")}
+                    return ResponseDone(
+                        event_id=json_object["event_id"],
+                        type=event_type,
+                        response=response,
+                    )
+                elif event_type == "response.created":
+                    # Handle both OpenAI (response dict) and Grok (response_id) formats
+                    response = json_object.get("response", {})
+                    if not response and "response_id" in json_object:
+                        response = {"id": json_object.get("response_id")}
+                    return ResponseCreated(
+                        event_id=json_object["event_id"],
+                        type=event_type,
+                        response=response,
+                    )
                 else:
-                    return event_class(**json_object)
+                    # Filter json_object to only include fields the dataclass expects
+                    # This handles Grok's extra fields like 'previous_item_id'
+                    filtered_obj = self._filter_event_fields(event_class, json_object)
+                    return event_class(**filtered_obj)
             except TypeError as e:
                 logger.error(f"Error creating event object for {event_type}: {e}")
         else:
@@ -190,6 +221,20 @@ class RealtimeAIServiceManager:
             logger.error(f"RealtimeAIServiceManager: Failed to clear event queue: {e}")
 
     def _get_event_class(self, event_type: str) -> Optional[Type[EventBase]]:
+        # Map Grok/xAI event types to OpenAI equivalents
+        event_type_aliases = {
+            # Grok uses "output_audio" instead of "audio" for response events
+            "response.output_audio.delta": "response.audio.delta",
+            "response.output_audio.done": "response.audio.done",
+            "response.output_audio_transcript.delta": "response.audio_transcript.delta",
+            "response.output_audio_transcript.done": "response.audio_transcript.done",
+            # Grok uses "conversation.item.added" instead of "conversation.item.created"
+            "conversation.item.added": "conversation.item.created",
+        }
+
+        # Normalize event type if it's a Grok alias
+        normalized_type = event_type_aliases.get(event_type, event_type)
+
         event_mapping = {
             "error": ErrorEvent,
             "input_audio_buffer.speech_stopped": InputAudioBufferSpeechStopped,
@@ -215,7 +260,7 @@ class RealtimeAIServiceManager:
             "input_audio_buffer.cleared": InputAudioBufferCleared,
             "reconnected": ReconnectedEvent
         }
-        return event_mapping.get(event_type)
+        return event_mapping.get(normalized_type)
 
     def get_next_event(self, timeout=5.0) -> Optional[EventBase]:
         try:
@@ -226,7 +271,18 @@ class RealtimeAIServiceManager:
 
     def _generate_event_id(self) -> str:
         return f"event_{uuid.uuid4()}"
-    
+
+    def _filter_event_fields(self, event_class: Type[EventBase], json_object: dict) -> dict:
+        """
+        Filter JSON object to only include fields that the event dataclass expects.
+        This handles providers like Grok that include extra fields.
+        """
+        import dataclasses
+        if dataclasses.is_dataclass(event_class):
+            valid_fields = {f.name for f in dataclasses.fields(event_class)}
+            return {k: v for k, v in json_object.items() if k in valid_fields}
+        return json_object
+
     @property
     def options(self):
         return self._options
