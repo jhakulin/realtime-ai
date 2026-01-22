@@ -16,9 +16,11 @@ from realtime_ai.models.normalized_events import (
     EventType,
     FunctionCallEvent,
     InputTranscriptCompletedEvent,
+    InputTranscriptDeltaEvent,
     NormalizedEvent,
     RateLimitsUpdatedEvent,
     ResponseContentPartAddedEvent,
+    ResponseContentPartDoneEvent,
     ResponseCreatedEvent,
     ResponseDoneEvent,
     ResponseOutputItemAddedEvent,
@@ -317,6 +319,14 @@ class RealtimeAIClient:
                 content_index=normalized_event.content_index,
                 transcript=normalized_event.transcript,
             )
+        elif isinstance(normalized_event, InputTranscriptDeltaEvent):
+            return realtime_ai_events.ConversationItemInputAudioTranscriptionDelta(
+                event_id=normalized_event.event_id,
+                type="conversation.item.input_audio_transcription.delta",
+                item_id=normalized_event.item_id,
+                content_index=normalized_event.content_index,
+                delta=normalized_event.delta,
+            )
         elif isinstance(normalized_event, InputTranscriptCompletedEvent):
             return realtime_ai_events.ConversationItemInputAudioTranscriptionCompleted(
                 event_id=normalized_event.event_id,
@@ -392,6 +402,16 @@ class RealtimeAIClient:
             return realtime_ai_events.ResponseContentPartAdded(
                 event_id=normalized_event.event_id,
                 type="response.content_part.added",
+                response_id=normalized_event.response_id,
+                item_id=normalized_event.item_id,
+                output_index=normalized_event.output_index,
+                content_index=normalized_event.content_index,
+                part=normalized_event.part,
+            )
+        elif isinstance(normalized_event, ResponseContentPartDoneEvent):
+            return realtime_ai_events.ResponseContentPartDone(
+                event_id=normalized_event.event_id,
+                type="response.content_part.done",
                 response_id=normalized_event.response_id,
                 item_id=normalized_event.item_id,
                 output_index=normalized_event.output_index,

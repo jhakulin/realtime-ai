@@ -57,6 +57,12 @@ class RealtimeAIEventHandler(ABC):
     async def on_rate_limits_updated(self, event: RateLimitsUpdated) -> None:
         pass
 
+    async def on_conversation_item_input_audio_transcription_delta(
+        self, event: ConversationItemInputAudioTranscriptionDelta
+    ) -> None:
+        """Handle streaming input transcription delta. Default implementation does nothing."""
+        pass
+
     @abstractmethod
     async def on_conversation_item_input_audio_transcription_completed(
         self, event: ConversationItemInputAudioTranscriptionCompleted
