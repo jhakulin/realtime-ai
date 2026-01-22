@@ -12,6 +12,7 @@ parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+from provider_config import get_provider_config, get_provider_env_keys
 from user_functions import user_functions
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
 from utils.audio_playback import AudioPlayer
@@ -207,9 +208,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
     async def on_response_audio_transcript_done(
         self, event: ResponseAudioTranscriptDone
     ) -> None:
-        logger.debug(
-            f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}"
-        )
+        logger.info(f"Assistant transcription complete: {event.transcript}")
 
     async def on_response_content_part_done(
         self, event: ResponseContentPartDone
@@ -368,27 +367,27 @@ async def main():
     audio_capture = None
 
     try:
-        # Retrieve OpenAI API key from environment variables
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            logger.error(
-                "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable."
-            )
+        # Get provider configuration (auto-detects from environment)
+        config = get_provider_config()
+        if not config:
+            env_keys = get_provider_env_keys()
+            env_list = ", ".join(env_keys.values())
+            logger.error(f"No API key found. Set one of: {env_list}")
             return
 
         functions = FunctionTool(functions=user_functions)
 
         # Define RealtimeOptions
         options = RealtimeAIOptions(
-            api_key=api_key,
-            model="gpt-4o-realtime-preview",  # Updated to current model
+            api_key=config["api_key"],
+            model=config["model"],
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Respond concisely. If user asks to tell story, tell story very shortly.",
             turn_detection=get_vad_configuration(use_server_vad=False),
             tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
-            voice="ballad",
+            voice=config["voice"],
         )
 
         # Define AudioStreamOptions
@@ -403,7 +402,9 @@ async def main():
         event_handler = MyRealtimeEventHandler(
             audio_player=audio_player, functions=functions
         )
-        client = RealtimeAIClient(options, stream_options, event_handler)
+        client = RealtimeAIClient(
+            options, stream_options, event_handler, provider=config["provider"]
+        )
         event_handler.set_client(client)
         await client.start()
 

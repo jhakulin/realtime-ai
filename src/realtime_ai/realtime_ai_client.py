@@ -19,9 +19,11 @@ from realtime_ai.models.normalized_events import (
     EventType,
     FunctionCallEvent,
     InputTranscriptCompletedEvent,
+    InputTranscriptDeltaEvent,
     NormalizedEvent,
     RateLimitsUpdatedEvent,
     ResponseContentPartAddedEvent,
+    ResponseContentPartDoneEvent,
     ResponseCreatedEvent,
     ResponseDoneEvent,
     ResponseOutputItemAddedEvent,
@@ -80,8 +82,17 @@ class RealtimeAIClient:
         self._audio_stream_manager = None
         self._stream_options = stream_options
 
-    def start(self):
-        """Starts the RealtimeAIClient."""
+        # Session ready event - signals when session is initialized
+        self._session_ready = threading.Event()
+
+    def start(self, session_ready_timeout: float = 10.0):
+        """
+        Starts the RealtimeAIClient.
+
+        Args:
+            session_ready_timeout: Maximum time to wait for session initialization (seconds).
+                                   Set to 0 to skip waiting.
+        """
         with self._lock:
             if self._is_running:
                 logger.warning("RealtimeAIClient: Client is already running.")
@@ -89,6 +100,7 @@ class RealtimeAIClient:
 
             self._is_running = True
             self._stop_event.clear()
+            self._session_ready.clear()
             try:
                 # Start provider loop for async operations
                 self._start_provider_loop()
@@ -118,6 +130,16 @@ class RealtimeAIClient:
                 )
                 self._consume_thread.start()
                 logger.debug("RealtimeAIClient: Event consumption thread started.")
+
+                # Wait for session to be ready (session.created or session.updated)
+                if session_ready_timeout > 0:
+                    if self._session_ready.wait(timeout=session_ready_timeout):
+                        logger.info("RealtimeAIClient: Session is ready.")
+                    else:
+                        logger.warning(
+                            f"RealtimeAIClient: Session ready timeout after {session_ready_timeout}s. "
+                            "Proceeding anyway - first interaction may be delayed."
+                        )
             except Exception as e:
                 self._is_running = False
                 logger.error(f"RealtimeAIClient: Error during client start: {e}")
@@ -273,6 +295,12 @@ class RealtimeAIClient:
                 if self._stop_event.is_set():
                     break
 
+                # Signal session ready on session.created or session.updated
+                if isinstance(normalized_event, (SessionCreatedEvent, SessionUpdatedEvent)):
+                    if not self._session_ready.is_set():
+                        self._session_ready.set()
+                        logger.debug("RealtimeAIClient: Session ready event received.")
+
                 # Convert normalized event to OpenAI format for backward compatibility
                 openai_event = self._to_openai_event(normalized_event)
                 if openai_event and self.executor is not None:
@@ -409,6 +437,14 @@ class RealtimeAIClient:
                 content_index=normalized_event.content_index,
                 transcript=normalized_event.transcript,
             )
+        elif isinstance(normalized_event, InputTranscriptDeltaEvent):
+            return realtime_ai_events.ConversationItemInputAudioTranscriptionDelta(
+                event_id=normalized_event.event_id,
+                type="conversation.item.input_audio_transcription.delta",
+                item_id=normalized_event.item_id,
+                content_index=normalized_event.content_index,
+                delta=normalized_event.delta,
+            )
 
         # Response events
         elif isinstance(normalized_event, ResponseCreatedEvent):
@@ -437,6 +473,16 @@ class RealtimeAIClient:
             return realtime_ai_events.ResponseContentPartAdded(
                 event_id=normalized_event.event_id,
                 type="response.content_part.added",
+                response_id=normalized_event.response_id,
+                item_id=normalized_event.item_id,
+                output_index=normalized_event.output_index,
+                content_index=normalized_event.content_index,
+                part=normalized_event.part,
+            )
+        elif isinstance(normalized_event, ResponseContentPartDoneEvent):
+            return realtime_ai_events.ResponseContentPartDone(
+                event_id=normalized_event.event_id,
+                type="response.content_part.done",
                 response_id=normalized_event.response_id,
                 item_id=normalized_event.item_id,
                 output_index=normalized_event.output_index,

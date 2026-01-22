@@ -32,13 +32,12 @@ The library supports multiple realtime AI providers through a unified interface.
 
 | Provider | Model | Status | Audio | Text | Function Calling | Voice Options |
 |----------|-------|--------|-------|------|------------------|---------------|
-| **OpenAI** | gpt-4o-realtime-preview | ✅ Production | ✅ | ✅ | ✅ | alloy, echo, shimmer, sage, ash, coral |
-| **Grok** | grok-2-voice | 🚧 Beta | 🚧 | 🚧 | 🚧 | ara, rex, sal, eve, leo |
-| **Gemini** | gemini-2.0-flash-exp | ✅ Production | ✅ | ✅ | ✅ | Puck, Charon, Kore, Fenrir, Aoede |
+| **OpenAI** | gpt-4o-realtime-preview | 🚧 Beta | ✅ | ✅ | ✅ | alloy, echo, shimmer, sage, ash, coral |
+| **Grok** | grok-3 | 🚧 Beta | ✅ | ✅ | 🚧 | ara, rex, sal, eve, leo |
+| **Gemini** | gemini-2.0-flash-exp | 🚧 Beta | ✅ | ✅ | ✅ | Puck, Charon, Kore, Fenrir, Aoede |
 
 **Status Legend:**
-- ✅ **Production**: Fully implemented and tested with real API (WebSocket complete)
-- 🚧 **Beta**: Architecture complete, endpoint configuration pending (minor work)
+- 🚧 **Beta**: Functional with real API connections, may have minor limitations or ongoing improvements
 
 ### Quick Start Examples
 
@@ -69,7 +68,7 @@ from realtime_ai.realtime_ai_client import RealtimeAIClient
 
 options = RealtimeAIOptions(
     api_key="xai-...",  # xAI API key
-    model="grok-2-voice",
+    model="grok-3",
     voice="ara",  # Grok voice personalities: ara, rex, sal, eve, leo
     modalities=["audio", "text"],
     instructions="You are a helpful assistant."
@@ -112,39 +111,40 @@ Existing code works without changes (defaults to OpenAI). To switch providers:
 
 ### Provider-Specific Features
 
-#### OpenAI ✅ Production Ready
+#### OpenAI 🚧 Beta
 - Advanced function calling with tool choice
 - Response truncation and audio buffer control
 - Azure OpenAI endpoint support
-- **Status**: Fully functional with real API connections
+- **Status**: Functional with real API connections
 
 #### Grok (xAI) 🚧 Beta
 - OpenAI-compatible API (easy migration)
 - Built-in web search and X (Twitter) search tools
-- Five distinct voice personalities
-- **Status**: Architecture complete, event handling tested. WebSocket endpoint configuration pending for real API connections.
+- Five distinct voice personalities (ara, rex, sal, eve, leo)
+- Real-time bidirectional audio streaming
+- **Status**: Functional with real API connections. WebSocket endpoint and event normalization complete.
 
-#### Gemini (Google) ✅ Production Ready
+#### Gemini (Google) 🚧 Beta
 - Event synthesis for OpenAI-compatible events (1:N mapping)
 - Native Google AI WebSocket integration
 - Advanced conversation capabilities
 - Real-time bidirectional audio streaming
-- **Status**: Fully functional with real API connections. WebSocket implementation complete, all features tested.
+- **Status**: Functional with real API connections
 
 ### Implementation Roadmap
 
-**Current Release (v1.1)**:
-- ✅ Multi-provider architecture (production ready)
-- ✅ OpenAI provider (fully functional)
-- ✅ Gemini provider (fully functional)
-- 🚧 Grok provider (architecture complete, endpoint config needed)
+**Current Release (v1.2)**:
+- ✅ Multi-provider architecture
+- 🚧 OpenAI provider (beta)
+- 🚧 Gemini provider (beta)
+- 🚧 Grok provider (beta)
 
 **Upcoming**:
-- Complete Grok WebSocket endpoint configuration (v1.2)
 - Add integration tests with real APIs
 - Performance optimizations
+- Additional provider support
 
-All providers share the same interface. OpenAI and Gemini are production-ready, and Grok will be fully functional once endpoint configuration is complete (no code changes required).
+All providers share the same interface and are functional for real-time audio and text conversations.
 
 ---
 

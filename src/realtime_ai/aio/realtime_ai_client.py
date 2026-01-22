@@ -67,11 +67,19 @@ class RealtimeAIClient:
         self._event_handler = event_handler
         self._is_running = False
         self._consume_task = None
+        self._session_ready = asyncio.Event()  # Tracks when session is initialized
 
-    async def start(self):
-        """Starts the RealtimeAIClient."""
+    async def start(self, session_ready_timeout: float = 10.0):
+        """
+        Starts the RealtimeAIClient.
+
+        Args:
+            session_ready_timeout: Maximum time to wait for session initialization (seconds).
+                                   Set to 0 to skip waiting.
+        """
         if not self._is_running:
             self._is_running = True
+            self._session_ready.clear()
             try:
                 # Connect to provider
                 await self._provider.connect()
@@ -81,6 +89,20 @@ class RealtimeAIClient:
 
                 # Schedule the event consumption coroutine as a background task
                 self._consume_task = asyncio.create_task(self._consume_events())
+
+                # Wait for session to be ready (session.created or session.updated)
+                if session_ready_timeout > 0:
+                    try:
+                        await asyncio.wait_for(
+                            self._session_ready.wait(),
+                            timeout=session_ready_timeout
+                        )
+                        logger.info("RealtimeAIClient: Session is ready.")
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"RealtimeAIClient: Session ready timeout after {session_ready_timeout}s. "
+                            "Proceeding anyway - first interaction may be delayed."
+                        )
             except Exception as e:
                 logger.error(f"RealtimeAIClient: Error during client start: {e}")
                 self._is_running = False
@@ -228,6 +250,12 @@ class RealtimeAIClient:
                     break
 
                 try:
+                    # Signal session ready on session.created or session.updated
+                    if isinstance(normalized_event, (SessionCreatedEvent, SessionUpdatedEvent)):
+                        if not self._session_ready.is_set():
+                            self._session_ready.set()
+                            logger.debug("RealtimeAIClient: Session ready event received.")
+
                     # Convert normalized event to OpenAI format for backward compatibility
                     openai_event = self._to_openai_event(normalized_event)
                     if openai_event:

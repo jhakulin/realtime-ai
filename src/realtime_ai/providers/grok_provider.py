@@ -26,6 +26,7 @@ from realtime_ai.models.normalized_events import (
     InputTranscriptCompletedEvent,
     SpeechStartedEvent, SpeechStoppedEvent,
     ResponseCreatedEvent, ResponseDoneEvent,
+    ResponseOutputItemAddedEvent, ResponseOutputItemDoneEvent,
     FunctionCallEvent, ErrorEvent, RateLimitsUpdatedEvent,
     AudioBufferCommittedEvent, ConversationItemCreatedEvent,
     RateLimit
@@ -215,16 +216,14 @@ class GrokProvider(BaseProvider):
         """
         Cancels the current response generation.
 
-        Clears event queue to prevent stale events.
+        Note: Grok does not support the response.cancel event - sending it causes
+        the server to close the WebSocket connection. Instead, we just clear the
+        local event queue to stop processing the current response.
         """
-        logger.info("GrokProvider: Cancelling ongoing response")
+        logger.info("GrokProvider: Cancelling ongoing response (local only - Grok does not support response.cancel)")
         try:
-            cancel_event = {
-                "type": "response.cancel"
-            }
-            await self._service_manager.send_event(cancel_event)
-
-            # Clear event queue
+            # Note: Do NOT send response.cancel to Grok - it closes the connection
+            # Just clear the local event queue to stop processing
             await self._service_manager.clear_event_queue()
             logger.info("GrokProvider: Successfully cancelled response")
         except Exception as e:
@@ -300,6 +299,7 @@ class GrokProvider(BaseProvider):
         """
         event_type = raw_event.get("type")
         event_id = raw_event.get("event_id", "")
+
 
         # Normalize Grok event types to OpenAI equivalents for matching
         event_type_aliases = {
@@ -501,6 +501,31 @@ class GrokProvider(BaseProvider):
                 status=raw_event.get("response", {}).get("status", "")
             )]
 
+        elif event_type == "response.output_item.added":
+            return [ResponseOutputItemAddedEvent(
+                event_id=event_id,
+                event_type=EventType.RESPONSE_OUTPUT_ITEM_ADDED,
+                timestamp=timestamp,
+                provider="grok",
+                raw_event=raw_event,
+                response_id=raw_event.get("response_id", ""),
+                output_index=raw_event.get("output_index", 0),
+                item=raw_event.get("item", {})
+            )]
+
+        elif event_type == "response.output_item.done":
+            return [ResponseOutputItemDoneEvent(
+                event_id=event_id,
+                event_type=EventType.RESPONSE_OUTPUT_ITEM_DONE,
+                timestamp=timestamp,
+                provider="grok",
+                raw_event=raw_event,
+                response_id=raw_event.get("response_id", ""),
+                item_id=raw_event.get("item_id", ""),
+                output_index=raw_event.get("output_index", 0),
+                item=raw_event.get("item", {})
+            )]
+
         # Function call events
         elif event_type == "response.function_call_arguments.done":
             return [FunctionCallEvent(
@@ -520,15 +545,26 @@ class GrokProvider(BaseProvider):
         # Error events
         elif event_type == "error":
             error_data = raw_event.get("error", {})
+            # Handle both dict and ErrorDetails dataclass
+            if hasattr(error_data, 'code'):
+                # It's an ErrorDetails dataclass
+                error_code = error_data.code or "unknown"
+                error_message = error_data.message or ""
+                error_type = error_data.type or ""
+            else:
+                # It's a dict
+                error_code = error_data.get("code", "unknown")
+                error_message = error_data.get("message", "")
+                error_type = error_data.get("type", "")
             return [ErrorEvent(
                 event_id=event_id,
                 event_type=EventType.ERROR,
                 timestamp=timestamp,
                 provider="grok",
                 raw_event=raw_event,
-                error_code=error_data.get("code", "unknown"),
-                error_message=error_data.get("message", ""),
-                error_type=error_data.get("type", "")
+                error_code=error_code,
+                error_message=error_message,
+                error_type=error_type
             )]
 
         # Rate limit events
@@ -553,6 +589,7 @@ class GrokProvider(BaseProvider):
             )]
 
         # Unknown event type - ignore
+        logger.debug(f"GrokProvider: Unhandled event type: {event_type}")
         return []
 
     # Optional features (Grok-compatible with OpenAI)
@@ -575,9 +612,12 @@ class GrokProvider(BaseProvider):
 
     async def clear_input_audio_buffer(self) -> None:
         """
-        Clears the input audio buffer (OpenAI-compatible feature).
+        Clears the input audio buffer.
+
+        Note: Grok always uses server-side VAD and does not properly support
+        the input_audio_buffer.clear event. Sending it can cause the connection
+        to close. We skip sending this event for Grok.
         """
-        event = {
-            "type": "input_audio_buffer.clear"
-        }
-        await self._service_manager.send_event(event)
+        logger.debug(
+            "GrokProvider: Skipping input_audio_buffer.clear (not supported by Grok)"
+        )

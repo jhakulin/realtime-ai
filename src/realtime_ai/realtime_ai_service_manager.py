@@ -118,9 +118,15 @@ class RealtimeAIServiceManager:
             try:
                 if event_type == "error" and 'error' in json_object:
                     # Convert error dict to ErrorDetails dataclass
-                    error_data = json_object['error']
+                    # Handle field name differences (Grok uses 'params', OpenAI uses 'param')
+                    error_data = json_object['error'].copy()
+                    if "params" in error_data and "param" not in error_data:
+                        error_data["param"] = error_data.pop("params")
+                    # Filter to only known fields
+                    known_fields = {"type", "code", "message", "param", "event_id"}
+                    error_data = {k: v for k, v in error_data.items() if k in known_fields}
                     error_details = ErrorDetails(**error_data)
-                    return ErrorEvent(event_id=json_object['event_id'], type=event_type, error=error_details)
+                    return ErrorEvent(event_id=json_object.get('event_id', ''), type=event_type, error=error_details)
                 elif event_type == "rate_limits.updated" and 'rate_limits' in json_object:
                     rate_limits_data = json_object['rate_limits']
                     rate_limits = [RateLimit(**rate) for rate in rate_limits_data]
@@ -185,7 +191,7 @@ class RealtimeAIServiceManager:
                     filtered_obj = self._filter_event_fields(event_class, json_object)
                     return event_class(**filtered_obj)
             except TypeError as e:
-                logger.error(f"Error creating event object for {event_type}: {e}")
+                logger.error(f"Error creating event object for {event_type}: {e}. Raw data: {json_object}")
         else:
             logger.warning(f"RealtimeAIServiceManager: Unknown message type received: {event_type}")
         return None
