@@ -24,7 +24,7 @@ Architecture:
                                   Local VAD (Silero ONNX)
 
 To run:
-    1. Set OPENAI_API_KEY (for OpenAI) or XAI_API_KEY (for Grok) environment variable
+    1. Set one of: OPENAI_API_KEY, XAI_API_KEY (Grok), or GOOGLE_API_KEY (Gemini)
     2. python sample_server_side_streaming.py
     3. Connect a WebSocket client to ws://localhost:8765
 
@@ -61,6 +61,7 @@ parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+from provider_config import get_provider_config, get_provider_env_keys
 from utils.vad import SileroVoiceActivityDetector, VoiceActivityDetector
 
 from realtime_ai.aio.realtime_ai_client import RealtimeAIClient
@@ -556,37 +557,39 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
     vad_processor = None
 
     try:
-        # Get API key from environment - check both OpenAI and Grok
-        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("XAI_API_KEY")
-        provider = "openai" if os.getenv("OPENAI_API_KEY") else "grok"
+        # Get provider configuration (auto-detects from environment)
+        config = get_provider_config()
 
-        if not api_key:
+        if not config:
+            env_keys = get_provider_env_keys()
+            env_list = ", ".join(env_keys.values())
             await websocket.send(
                 json.dumps(
                     {
                         "type": "error",
-                        "message": "Server not configured: OPENAI_API_KEY or XAI_API_KEY not set",
+                        "message": f"Server not configured: Set one of {env_list}",
                     }
                 )
             )
             return
+
+        provider = config["provider"]
 
         # Create event handler for this client connection
         handler = ServerSideEventHandler(websocket, use_local_vad=USE_LOCAL_VAD)
 
         # Configure AI options
         # When using local VAD, disable server-side VAD (turn_detection=None)
-        # Note: Use "gpt-realtime" for image/vision support
+        # Note: For OpenAI, use "gpt-realtime" for image/vision support
         #       Use "gpt-4o-realtime-preview" for audio/text only (no image support)
-        # For Grok Voice Agent API, use "grok-3" (or "grok-2-public" for older)
-        model = "gpt-realtime" if provider == "openai" else "grok-3"
+        model = "gpt-realtime" if provider == "openai" else config["model"]
 
         options = RealtimeAIOptions(
-            api_key=api_key,
+            api_key=config["api_key"],
             model=model,
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Keep responses concise.",
-            voice="alloy",
+            voice=config["voice"],
             input_audio_format="pcm16",
             output_audio_format="pcm16",
             # Disable server VAD when using local VAD
@@ -687,7 +690,7 @@ async def handle_client_connection(websocket: WebSocketServerProtocol):
                                     json.dumps(
                                         {
                                             "type": "image_error",
-                                            "message": f"Provider does not support images: {PROVIDER}",
+                                            "message": f"Provider does not support images: {provider}",
                                         }
                                     )
                                 )
@@ -781,14 +784,14 @@ async def main():
     logger.info("=" * 60)
 
     # Check for API key
-    if not os.getenv("OPENAI_API_KEY") and not os.getenv("XAI_API_KEY"):
+    config = get_provider_config()
+    if not config:
+        env_keys = get_provider_env_keys()
         logger.error("")
-        logger.error(
-            "ERROR: OPENAI_API_KEY or XAI_API_KEY environment variable not set!"
-        )
+        logger.error("ERROR: No API key environment variable set!")
         logger.error("Please set one before running:")
-        logger.error("  For OpenAI: export OPENAI_API_KEY=your-key")
-        logger.error("  For Grok: export XAI_API_KEY=your-key")
+        for provider_name, env_key in env_keys.items():
+            logger.error(f"  For {provider_name.capitalize()}: export {env_key}=your-key")
         logger.error("")
         return
 

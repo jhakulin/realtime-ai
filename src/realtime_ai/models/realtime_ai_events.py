@@ -11,11 +11,11 @@ class EventBase:
 # Error Event
 @dataclass
 class ErrorDetails:
-    type: str
-    code: str
-    message: str
-    param: Optional[str]
-    event_id: Optional[str]
+    type: str = ""
+    code: str = ""
+    message: str = ""
+    param: Optional[str] = None
+    event_id: Optional[str] = None
 
 
 @dataclass

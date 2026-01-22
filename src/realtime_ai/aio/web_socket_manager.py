@@ -136,35 +136,45 @@ class WebSocketManager:
         """
         Sends a message over the WebSocket.
         """
-        # check if message is cancel_event
-        if self._websocket:
-            try:
-                message_str = json.dumps(message)
-                await self._websocket.send(message_str)
-                logger.debug(f"WebSocketManager: Sent message: {message_str}")
-            except Exception as e:
-                error_str = str(e).lower()
-                # Check for fatal errors
-                is_fatal = any(error in error_str for error in FATAL_ERROR_PATTERNS)
-
-                if is_fatal:
-                    logger.error(
-                        f"WebSocketManager: Fatal error in send - {e}. Closing connection."
-                    )
-                    # Close the websocket to prevent retry loop
-                    if self._websocket:
-                        await self._websocket.close()
-                        self._websocket = None
-                    # Don't call on_error for fatal errors to prevent retry attempts
-                    return
-                else:
-                    logger.error(f"WebSocketManager: Send failed: {e}")
-                    await self._service_manager.on_error(e)
-        else:
-            logger.error(
-                "WebSocketManager: Cannot send message. WebSocket is not connected."
+        if not self._websocket:
+            logger.debug(
+                "WebSocketManager: Cannot send message - WebSocket is not connected."
             )
-            raise ConnectionError("WebSocket is not connected.")
+            return
+
+        # Check if websocket is still open (close_code is set when connection is closed)
+        if self._websocket.close_code is not None:
+            logger.debug(
+                "WebSocketManager: Cannot send message - WebSocket is closed."
+            )
+            return
+
+        try:
+            message_str = json.dumps(message)
+            await self._websocket.send(message_str)
+            logger.debug(f"WebSocketManager: Sent message: {message_str}")
+        except websockets.exceptions.ConnectionClosed as e:
+            # Connection was closed, don't flood logs
+            logger.debug(f"WebSocketManager: Send failed - connection closed: {e}")
+            await self._service_manager.on_disconnected(e.code, e.reason)
+        except Exception as e:
+            error_str = str(e).lower()
+            # Check for fatal errors
+            is_fatal = any(error in error_str for error in FATAL_ERROR_PATTERNS)
+
+            if is_fatal:
+                logger.error(
+                    f"WebSocketManager: Fatal error in send - {e}. Closing connection."
+                )
+                # Close the websocket to prevent retry loop
+                if self._websocket:
+                    await self._websocket.close()
+                    self._websocket = None
+                # Don't call on_error for fatal errors to prevent retry attempts
+                return
+            else:
+                logger.error(f"WebSocketManager: Send failed: {e}")
+                await self._service_manager.on_error(e)
 
     @property
     def options(self):

@@ -7,6 +7,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Any, Dict
 
+from provider_config import get_provider_config, get_provider_env_keys
 from user_functions import user_functions
 from utils.audio_capture import AudioCapture, AudioCaptureEventHandler
 from utils.audio_playback import AudioPlayer
@@ -254,9 +255,7 @@ class MyRealtimeEventHandler(RealtimeAIEventHandler):
         )
 
     def on_response_audio_transcript_done(self, event: ResponseAudioTranscriptDone):
-        logger.debug(
-            f"Audio transcript done: '{event.transcript}' for response ID {event.response_id}"
-        )
+        logger.info(f"Assistant transcription complete: {event.transcript}")
 
     def on_response_content_part_done(self, event: ResponseContentPartDone):
         part_type = event.part.get("type")
@@ -386,28 +385,21 @@ def get_vad_configuration(use_server_vad=False):
         return None  # Local VAD typically requires no special configuration
 
 
-def get_openai_configuration():
+def get_azure_openai_configuration():
+    """Get Azure OpenAI configuration if available."""
     # The Azure endpoint shall be in the format: "wss://<service-name>.openai.azure.com/openai/realtime"
     azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    api_key = None
-    azure_api_version = None
-
     if not azure_endpoint:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            logger.error(
-                "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable."
-            )
-            return None, None, None
-    else:
-        api_key = os.getenv("AZURE_OPENAI_API_KEY")
-        azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
+        return None, None, None
 
-        if not api_key or not azure_endpoint or not azure_api_version:
-            logger.error(
-                "Please set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_API_VERSION environment variables."
-            )
-            return None, None, None
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-01-preview")
+
+    if not api_key or not azure_endpoint or not azure_api_version:
+        logger.error(
+            "Please set the AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, and AZURE_OPENAI_API_VERSION environment variables."
+        )
+        return None, None, None
 
     return azure_endpoint, api_key, azure_api_version
 
@@ -421,23 +413,43 @@ def main():
     audio_capture = None
 
     try:
-        azure_openai_endpoint, api_key, azure_api_version = get_openai_configuration()
-        if not api_key:
-            return
+        # Check for Azure OpenAI first
+        azure_openai_endpoint, azure_api_key, azure_api_version = (
+            get_azure_openai_configuration()
+        )
+
+        if azure_openai_endpoint and azure_api_key:
+            # Use Azure OpenAI
+            config = {
+                "provider": "openai",
+                "api_key": azure_api_key,
+                "model": "gpt-4o-realtime-preview",
+                "voice": "echo",
+            }
+        else:
+            # Get provider configuration (auto-detects from environment)
+            config = get_provider_config()
+            if not config:
+                env_keys = get_provider_env_keys()
+                env_list = ", ".join(env_keys.values())
+                logger.error(f"No API key found. Set one of: {env_list}")
+                return
+            azure_openai_endpoint = None
+            azure_api_version = None
 
         functions = FunctionTool(functions=user_functions)
 
         # Define RealtimeOptions
         options = RealtimeAIOptions(
-            api_key=api_key,
-            model="gpt-4o-realtime-preview",
+            api_key=config["api_key"],
+            model=config["model"],
             modalities=["audio", "text"],
             instructions="You are a helpful assistant. Respond concisely. You have access to a variety of tools to analyze, translate and review text and code.",
             turn_detection=get_vad_configuration(use_server_vad=False),
             tools=functions.definitions,
             tool_choice="auto",
             temperature=0.8,
-            voice="echo",
+            voice=config["voice"],
             enable_auto_reconnect=True,
             azure_openai_endpoint=azure_openai_endpoint,
             azure_openai_api_version=azure_api_version,
@@ -455,7 +467,9 @@ def main():
         event_handler = MyRealtimeEventHandler(
             audio_player=audio_player, functions=functions
         )
-        client = RealtimeAIClient(options, stream_options, event_handler)
+        client = RealtimeAIClient(
+            options, stream_options, event_handler, provider=config["provider"]
+        )
         event_handler.set_client(client)
         client.start()
 
