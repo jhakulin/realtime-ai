@@ -17,6 +17,7 @@ from realtime_ai.models.normalized_events import (
     AudioDeltaEvent,
     AudioDoneEvent,
     ConversationItemCreatedEvent,
+    ConversationItemDeletedEvent,
     ErrorEvent,
     EventType,
     FunctionCallEvent,
@@ -677,6 +678,18 @@ class OpenAIProvider(BaseProvider):
                 )
             ]
 
+        elif event_type == "conversation.item.deleted":
+            return [
+                ConversationItemDeletedEvent(
+                    event_id=event_id,
+                    event_type=EventType.CONVERSATION_ITEM_DELETED,
+                    timestamp=timestamp,
+                    provider="openai",
+                    raw_event=raw_event,
+                    item_id=raw_event.get("item_id", ""),
+                )
+            ]
+
         # Error Events
         elif event_type == "error":
             error_data = raw_event.get("error", {})
@@ -764,6 +777,64 @@ class OpenAIProvider(BaseProvider):
         }
         await self._service_manager.send_event(clear_event)
         logger.debug("OpenAIProvider: Cleared input audio buffer")
+
+    async def commit_audio_buffer(self) -> None:
+        """
+        Commit the input audio buffer without generating a response.
+
+        This triggers:
+        - input_audio_buffer.committed event (immediately)
+        - conversation.item.created event (user message item created)
+        - conversation.item.input_audio_transcription.completed event
+          (async, only if input_audio_transcription_enabled=True in session config)
+
+        Note: Transcription runs asynchronously. The transcription event may arrive
+        before or after other events. Use item_id to correlate events.
+
+        Use this for push-to-talk scenarios when you need the transcription
+        but want to control when the response is generated separately.
+        """
+        logger.info("OpenAIProvider: Committing audio buffer without response")
+        try:
+            commit_event = {
+                "event_id": self._generate_event_id(),
+                "type": "input_audio_buffer.commit",
+            }
+            await self._service_manager.send_event(commit_event)
+            logger.debug("OpenAIProvider: Committed audio buffer (no response)")
+        except Exception as e:
+            logger.error(
+                f"OpenAIProvider: Failed to commit audio buffer - {type(e).__name__}: {str(e)}",
+                exc_info=True,
+            )
+            raise
+
+    async def delete_conversation_item(self, item_id: str) -> None:
+        """
+        Delete a conversation item from the history.
+
+        Args:
+            item_id: The ID of the conversation item to delete.
+
+        This triggers:
+        - conversation.item.deleted event on success
+        - error event if item doesn't exist
+        """
+        logger.info(f"OpenAIProvider: Deleting conversation item {item_id}")
+        try:
+            delete_event = {
+                "event_id": self._generate_event_id(),
+                "type": "conversation.item.delete",
+                "item_id": item_id,
+            }
+            await self._service_manager.send_event(delete_event)
+            logger.debug(f"OpenAIProvider: Deleted conversation item {item_id}")
+        except Exception as e:
+            logger.error(
+                f"OpenAIProvider: Failed to delete conversation item - {type(e).__name__}: {str(e)}",
+                exc_info=True,
+            )
+            raise
 
     # ============================================================================
     # Helper Methods

@@ -33,6 +33,12 @@ class RealtimeAIEventHandler(ABC):
     ) -> None:
         pass
 
+    async def on_conversation_item_deleted(
+        self, event: ConversationItemDeleted
+    ) -> None:
+        """Handle conversation item deletion. Default implementation does nothing."""
+        pass
+
     @abstractmethod
     async def on_response_created(self, event: ResponseCreated) -> None:
         pass

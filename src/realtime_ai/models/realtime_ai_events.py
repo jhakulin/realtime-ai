@@ -43,6 +43,11 @@ class ConversationItemCreated(EventBase):
     item: Dict[str, Any]
 
 
+@dataclass
+class ConversationItemDeleted(EventBase):
+    item_id: str
+
+
 # Response Events
 @dataclass
 class ResponseCreated(EventBase):

@@ -32,7 +32,16 @@ PROVIDERS = {
         "env_key": "OPENAI_API_KEY",
         "default_model": "gpt-4o-realtime-preview",
         "default_voice": "alloy",
-        "voices": ["alloy", "echo", "shimmer", "sage", "ash", "coral", "ballad", "verse"],
+        "voices": [
+            "alloy",
+            "echo",
+            "shimmer",
+            "sage",
+            "ash",
+            "coral",
+            "ballad",
+            "verse",
+        ],
     },
     "grok": {
         "env_key": "XAI_API_KEY",

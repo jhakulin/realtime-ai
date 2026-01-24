@@ -286,6 +286,53 @@ class BaseProvider(ABC):
         """
         pass
 
+    async def commit_audio_buffer(self) -> None:
+        """
+        Commit the input audio buffer without generating a response.
+
+        This triggers:
+        - input_audio_buffer.committed event (immediately)
+        - conversation.item.created event (user message item created)
+        - conversation.item.input_audio_transcription.completed event
+          (async, only if input_audio_transcription_enabled=True in session config)
+
+        Note: Transcription runs asynchronously. The transcription event may arrive
+        before or after other events. Use item_id to correlate events.
+
+        Use this for push-to-talk scenarios when you need the transcription
+        but want to control when the response is generated separately.
+
+        Default implementation does nothing (for providers without explicit buffering).
+        """
+        pass
+
+    async def delete_conversation_item(self, item_id: str) -> None:
+        """
+        Delete a conversation item from the history.
+
+        Args:
+            item_id: The ID of the conversation item to delete.
+
+        This triggers:
+        - conversation.item.deleted event on success
+        - error event if item doesn't exist
+
+        Use this to remove specific items from conversation history.
+        Default implementation does nothing.
+        """
+        pass
+
+    async def reconnect(self) -> None:
+        """
+        Reconnect to get a fresh session with no conversation history.
+
+        Use this when the provider doesn't support conversation.item.delete
+        (e.g., Grok) and you need to clear conversation context.
+
+        Default implementation does nothing.
+        """
+        pass
+
     # ============================================================================
     # Optional: Image/Vision Operations
     # ============================================================================
