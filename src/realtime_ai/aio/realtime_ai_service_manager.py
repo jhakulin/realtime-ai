@@ -7,6 +7,7 @@ from typing import Optional, Type
 from realtime_ai.aio.web_socket_manager import WebSocketManager
 from realtime_ai.models.realtime_ai_events import (
     ConversationItemCreated,
+    ConversationItemDeleted,
     ConversationItemInputAudioTranscriptionCompleted,
     ConversationItemInputAudioTranscriptionDelta,
     ErrorDetails,
@@ -126,7 +127,7 @@ class RealtimeAIServiceManager:
         event_type = json_object.get("type")
 
         # Skip known ignorable events (ping, conversation.created are Grok keepalive/info events)
-        ignorable_events = {"ping", "conversation.created"}
+        ignorable_events = {"ping", "conversation.created", "reconnect"}
         if event_type in ignorable_events:
             logger.debug(f"RealtimeAIServiceManager: Ignoring event type: {event_type}")
             return None
@@ -258,6 +259,18 @@ class RealtimeAIServiceManager:
         except Exception as e:
             logger.error(f"RealtimeAIServiceManager: Failed to clear event queue: {e}")
 
+    async def reconnect(self):
+        """Reconnects the WebSocket to get a fresh session."""
+        logger.info("RealtimeAIServiceManager: Reconnecting for fresh session...")
+        try:
+            await self._websocket_manager.disconnect()
+            await self.clear_event_queue()
+            await self._websocket_manager.connect(reconnection=True)
+            logger.info("RealtimeAIServiceManager: Reconnected successfully.")
+        except Exception as e:
+            logger.error(f"RealtimeAIServiceManager: Reconnect failed: {e}")
+            raise
+
     def _get_event_class(self, event_type: str) -> Optional[Type[EventBase]]:
         # Map Grok/xAI event types to OpenAI equivalents
         event_type_aliases = {
@@ -278,6 +291,7 @@ class RealtimeAIServiceManager:
             "input_audio_buffer.speech_stopped": InputAudioBufferSpeechStopped,
             "input_audio_buffer.committed": InputAudioBufferCommitted,
             "conversation.item.created": ConversationItemCreated,
+            "conversation.item.deleted": ConversationItemDeleted,
             "response.created": ResponseCreated,
             "response.content_part.added": ResponseContentPartAdded,
             "response.audio.delta": ResponseAudioDelta,

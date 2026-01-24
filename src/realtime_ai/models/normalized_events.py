@@ -60,6 +60,7 @@ class EventType(Enum):
 
     # Conversation Events
     CONVERSATION_ITEM_CREATED = "conversation.item.created"
+    CONVERSATION_ITEM_DELETED = "conversation.item.deleted"
 
 
 @dataclass
@@ -328,3 +329,9 @@ class ConversationItemCreatedEvent(NormalizedEvent):
     """Conversation item created."""
     previous_item_id: str = ""
     item: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ConversationItemDeletedEvent(NormalizedEvent):
+    """Conversation item deleted."""
+    item_id: str = ""

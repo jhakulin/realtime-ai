@@ -307,6 +307,7 @@ class GrokProvider(BaseProvider):
             "response.output_audio.done": "response.audio.done",
             "response.output_audio_transcript.delta": "response.audio_transcript.delta",
             "response.output_audio_transcript.done": "response.audio_transcript.done",
+            "conversation.item.added": "conversation.item.created",
         }
         event_type = event_type_aliases.get(event_type, event_type)
         timestamp = time.time()
@@ -621,3 +622,57 @@ class GrokProvider(BaseProvider):
         logger.debug(
             "GrokProvider: Skipping input_audio_buffer.clear (not supported by Grok)"
         )
+
+    async def commit_audio_buffer(self) -> None:
+        """
+        Commit the input audio buffer without generating a response.
+
+        This triggers:
+        - input_audio_buffer.committed event (immediately)
+        - conversation.item.created event (user message item created)
+        - conversation.item.input_audio_transcription.completed event
+          (async, only if input_audio_transcription_enabled=True in session config)
+
+        Note: Transcription runs asynchronously. The transcription event may arrive
+        before or after other events. Use item_id to correlate events.
+        """
+        logger.info("GrokProvider: Committing audio buffer without response")
+        try:
+            commit_event = {
+                "type": "input_audio_buffer.commit"
+            }
+            await self._service_manager.send_event(commit_event)
+            logger.debug("GrokProvider: Committed audio buffer (no response)")
+        except Exception as e:
+            logger.error(
+                f"GrokProvider: Failed to commit audio buffer - {type(e).__name__}: {str(e)}",
+                exc_info=True,
+            )
+            raise
+
+    async def delete_conversation_item(self, item_id: str) -> None:
+        """
+        Delete a conversation item from the history.
+
+        Note: Grok does not support the conversation.item.delete event.
+        This method is a no-op. To reset conversation context with Grok,
+        use reconnect() to get a fresh session.
+
+        Args:
+            item_id: The ID of the conversation item to delete (ignored).
+        """
+        logger.debug(
+            f"GrokProvider: Skipping conversation.item.delete for {item_id} "
+            "(not supported by Grok)"
+        )
+
+    async def reconnect(self) -> None:
+        """
+        Reconnect to get a fresh session with no conversation history.
+
+        This is the only way to clear conversation context in Grok,
+        since it doesn't support conversation.item.delete.
+        """
+        logger.info("GrokProvider: Reconnecting for fresh session...")
+        await self._service_manager.reconnect()
+        logger.info("GrokProvider: Reconnected with fresh session.")

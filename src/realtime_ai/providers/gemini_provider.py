@@ -709,3 +709,14 @@ class GeminiProvider(BaseProvider):
         Gemini doesn't have explicit buffer management - implement as no-op.
         """
         pass
+
+    async def commit_audio_buffer(self) -> None:
+        """
+        Commit the input audio buffer without generating a response.
+
+        Gemini doesn't have explicit audio buffer management like OpenAI/Grok.
+        Audio is processed automatically via VAD. This is a no-op for Gemini.
+        """
+        logger.debug(
+            "GeminiProvider: commit_audio_buffer is a no-op (Gemini uses automatic VAD)"
+        )

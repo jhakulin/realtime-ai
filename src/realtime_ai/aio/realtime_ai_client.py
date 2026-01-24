@@ -12,6 +12,7 @@ from realtime_ai.models.normalized_events import (
     AudioDeltaEvent,
     AudioDoneEvent,
     ConversationItemCreatedEvent,
+    ConversationItemDeletedEvent,
     ErrorEvent,
     EventType,
     FunctionCallEvent,
@@ -68,6 +69,9 @@ class RealtimeAIClient:
         self._is_running = False
         self._consume_task = None
         self._session_ready = asyncio.Event()  # Tracks when session is initialized
+
+        # Track conversation item IDs for clear_conversation()
+        self._conversation_item_ids: list = []
 
     async def start(self, session_ready_timeout: float = 10.0):
         """
@@ -221,6 +225,111 @@ class RealtimeAIClient:
             f"RealtimeAIClient: Sent clear buffer request to {self._provider_name} provider."
         )
 
+    async def commit_audio_buffer(self):
+        """
+        Commit the input audio buffer without generating a response.
+
+        This triggers:
+        - input_audio_buffer.committed event (immediately)
+        - conversation.item.created event (user message item created)
+        - conversation.item.input_audio_transcription.completed event
+          (async, only if input_audio_transcription_enabled=True in RealtimeAIOptions)
+
+        Note: Transcription runs asynchronously. The transcription event may arrive
+        before or after other events. Use item_id from the committed event to
+        correlate with the transcription completed event.
+
+        Use this for push-to-talk scenarios when you need the transcription
+        but want to control when the response is generated separately.
+
+        Example workflow:
+            1. User presses button, speaks, releases button
+            2. App sends audio to Realtime API
+            3. App calls commit_audio_buffer() to get transcription
+            4. App waits for on_conversation_item_input_audio_transcription_completed event
+            5. App processes transcription + image analysis + tool selection
+            6. App calls generate_response(commit_audio_buffer=False) with full context
+        """
+        await self._provider.commit_audio_buffer()
+        logger.info(
+            f"RealtimeAIClient: Committed audio buffer to {self._provider_name} provider."
+        )
+
+    async def delete_conversation_item(self, item_id: str):
+        """
+        Delete a conversation item from the history.
+
+        Args:
+            item_id: The ID of the conversation item to delete.
+
+        This triggers:
+        - conversation.item.deleted event on success
+        - error event if item doesn't exist
+        """
+        await self._provider.delete_conversation_item(item_id)
+
+        # Remove from local tracking
+        if item_id in self._conversation_item_ids:
+            self._conversation_item_ids.remove(item_id)
+
+        logger.info(
+            f"RealtimeAIClient: Deleted conversation item {item_id} from {self._provider_name} provider."
+        )
+
+    async def clear_conversation(self):
+        """
+        Clear all conversation history for a fresh start.
+
+        Use this when starting a new independent interaction within
+        the same session (e.g., user scans a new product).
+
+        For providers that support conversation.item.delete (OpenAI),
+        this deletes all tracked items. For providers that don't (Grok),
+        this reconnects to get a fresh session.
+        """
+        # Grok doesn't support conversation.item.delete, use reconnect instead
+        if self._provider.provider_name == "grok":
+            logger.info("RealtimeAIClient: Clearing conversation via reconnect (Grok).")
+            await self.reconnect()
+            return
+
+        items_to_delete = self._conversation_item_ids.copy()
+
+        if not items_to_delete:
+            logger.info("RealtimeAIClient: No conversation items to clear.")
+            return
+
+        logger.info(f"RealtimeAIClient: Clearing {len(items_to_delete)} conversation items.")
+
+        for item_id in items_to_delete:
+            try:
+                await self._provider.delete_conversation_item(item_id)
+            except Exception as e:
+                logger.warning(f"RealtimeAIClient: Failed to delete item {item_id}: {e}")
+
+        # Clear local tracking
+        self._conversation_item_ids.clear()
+
+        logger.info(
+            f"RealtimeAIClient: Conversation cleared on {self._provider_name} provider."
+        )
+
+    async def reconnect(self):
+        """
+        Reconnect to get a fresh session with no conversation history.
+
+        This disconnects and reconnects the WebSocket, giving a completely
+        fresh session. Use this when the provider doesn't support deleting
+        individual conversation items.
+        """
+        logger.info("RealtimeAIClient: Reconnecting for fresh session...")
+        await self._provider.reconnect()
+
+        # Clear local tracking
+        self._conversation_item_ids.clear()
+
+        logger.info("RealtimeAIClient: Reconnected with fresh session.")
+
     async def generate_response_from_function_call(
         self, call_id: str, function_output: str
     ):
@@ -254,6 +363,13 @@ class RealtimeAIClient:
                     if isinstance(normalized_event, (SessionCreatedEvent, SessionUpdatedEvent)):
                         if not self._session_ready.is_set():
                             self._session_ready.set()
+
+                    # Track conversation item IDs for clear_conversation()
+                    if isinstance(normalized_event, ConversationItemCreatedEvent):
+                        item_id = normalized_event.item.get("id") if normalized_event.item else None
+                        if item_id:
+                            self._conversation_item_ids.append(item_id)
+                            logger.debug(f"RealtimeAIClient: Tracking conversation item {item_id}")
                             logger.debug("RealtimeAIClient: Session ready event received.")
 
                     # Convert normalized event to OpenAI format for backward compatibility
@@ -401,6 +517,13 @@ class RealtimeAIClient:
                 type="conversation.item.created",
                 previous_item_id=normalized_event.previous_item_id,
                 item=normalized_event.item,
+            )
+
+        elif isinstance(normalized_event, ConversationItemDeletedEvent):
+            return realtime_ai_events.ConversationItemDeleted(
+                event_id=normalized_event.event_id,
+                type="conversation.item.deleted",
+                item_id=normalized_event.item_id,
             )
 
         # Response events
